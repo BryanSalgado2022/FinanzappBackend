@@ -23,6 +23,7 @@ def create_concepto(
     periodo_tasa: PeriodoTasa | None = None,
     numero_cuotas: int | None = None,
     duracion_meses: int | None = None,
+    dia_vencimiento: int | None = None,
 ) -> Concepto:
     concepto = Concepto(
         user_id=user_id,
@@ -34,6 +35,7 @@ def create_concepto(
         periodo_tasa=periodo_tasa,
         numero_cuotas=numero_cuotas,
         duracion_meses=duracion_meses,
+        dia_vencimiento=dia_vencimiento,
     )
     session.add(concepto)
     session.commit()
@@ -65,6 +67,7 @@ def update_concepto(
     categoria: str | None = None,
     activo: bool | None = None,
     valor_total: Decimal | None = None,
+    dia_vencimiento: int | None = None,
 ) -> Concepto:
     concepto = get_concepto(session, user_id, concepto_id)
     if nombre is not None:
@@ -82,6 +85,13 @@ def update_concepto(
                 "delete this concept and create a new one instead"
             )
         concepto.valor_total = valor_total
+    if dia_vencimiento is not None:
+        if concepto.tipo == TipoConcepto.INGRESO:
+            raise ValueError("dia_vencimiento is not allowed for concepts of type 'ingreso'")
+        # No es_amortizada guard here, unlike valor_total above - dia_vencimiento
+        # is informational only and never feeds a recalculation, so it stays
+        # editable even on a locked amortized debt.
+        concepto.dia_vencimiento = dia_vencimiento
     session.add(concepto)
     session.commit()
     session.refresh(concepto)

@@ -89,7 +89,7 @@ Ese JWT se manda en cada request subsecuente como `Authorization: Bearer <token>
 | POST | `/concepts` | Crear concepto (deuda / gasto_fijo / ingreso; deudas aceptan `tasa_interes`+`periodo_tasa`+`numero_cuotas` opcionales) |
 | GET | `/concepts` | Listar conceptos del usuario autenticado |
 | GET | `/concepts/{id}` | Ver un concepto (incluye saldo restante y, si tiene amortización, `cuota_fija`) |
-| PATCH | `/concepts/{id}` | Actualizar nombre/categoría/estado/valor_total (valor_total no editable si la deuda tiene amortización) |
+| PATCH | `/concepts/{id}` | Actualizar nombre/categoría/estado/valor_total/dia_vencimiento (valor_total no editable si la deuda tiene amortización; dia_vencimiento siempre editable) |
 | DELETE | `/concepts/{id}` | Eliminar concepto (elimina también sus entradas mensuales) |
 | GET | `/concepts/{id}/entries` | Listar entradas mensuales de un concepto |
 | PUT | `/concepts/{id}/entries/{anio}/{mes}` | Crear/actualizar el monto planeado/pagado de un mes |
@@ -106,4 +106,5 @@ Ver el contrato completo y ejemplos en `/docs` (Swagger) una vez la API está co
 - Una deuda con `tasa_interes` + `numero_cuotas` calcula la cuota fija (método francés) y genera **todo** el cronograma de una vez (puede cruzar años). `tasa_interes` anual se convierte a mensual con la fórmula de tasa efectiva (no `/12`), igual que la reportan los bancos colombianos.
 - `gasto_fijo`/`ingreso` pueden llevar `duracion_meses` (opcional, no aplica a `deuda`): genera exactamente esa cantidad de meses de una vez, igual que una amortización pero con un monto fijo repetido, y luego deja de generar — útil para un ingreso o gasto temporal con fecha de fin conocida.
 - `valor_total`, `tasa_interes`, `periodo_tasa`, `numero_cuotas` y `duracion_meses` quedan **inmutables** una vez creado el concepto — para cambiar condiciones, se elimina el concepto y se crea uno nuevo (decisión explícita del usuario para evitar lógica de recálculo).
+- `deuda`/`gasto_fijo` pueden llevar `dia_vencimiento` (1-28, opcional, no aplica a `ingreso`) — a diferencia de los campos anteriores, es **siempre editable** porque es puramente informativo y no dispara ningún recálculo. Cada entrada mensual expone `vencida` (calculado al vuelo: no pagada y con fecha de vencimiento ya pasada).
 - El backlog explícito está documentado en `openspec/changes/archive/2026-08-15-add-debt-amortization/proposal.md`: presupuesto por categorías tipo sobres (Necesidades/Deseos/Deudas/Futuro), función de importar datos, categorización de gastos por IA en lenguaje natural, multi-moneda.

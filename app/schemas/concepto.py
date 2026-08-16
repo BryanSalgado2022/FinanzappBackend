@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from app.models.concepto import PeriodoTasa, TipoConcepto
 
@@ -24,6 +24,9 @@ class ConceptoCreate(BaseModel):
     # not valid on deuda). When set together with monto_planeado, generates
     # exactly that many months at creation instead of the open-ended behavior.
     duracion_meses: int | None = None
+    # Day of month (1-28) an installment is due (optional, deuda/gasto_fijo
+    # only). Purely informational - editable at any time, see ConceptoUpdate.
+    dia_vencimiento: int | None = Field(default=None, ge=1, le=28)
 
     @model_validator(mode="after")
     def validate_valor_total(self) -> "ConceptoCreate":
@@ -54,12 +57,19 @@ class ConceptoCreate(BaseModel):
             raise ValueError("duracion_meses is not allowed for concepts of type 'deuda'")
         return self
 
+    @model_validator(mode="after")
+    def validate_dia_vencimiento(self) -> "ConceptoCreate":
+        if self.dia_vencimiento is not None and self.tipo == TipoConcepto.INGRESO:
+            raise ValueError("dia_vencimiento is not allowed for concepts of type 'ingreso'")
+        return self
+
 
 class ConceptoUpdate(BaseModel):
     nombre: str | None = None
     categoria: str | None = None
     activo: bool | None = None
     valor_total: Decimal | None = None
+    dia_vencimiento: int | None = Field(default=None, ge=1, le=28)
 
 
 class ConceptoRead(BaseModel):
@@ -74,4 +84,5 @@ class ConceptoRead(BaseModel):
     numero_cuotas: int | None
     cuota_fija: Decimal | None
     duracion_meses: int | None
+    dia_vencimiento: int | None
     activo: bool

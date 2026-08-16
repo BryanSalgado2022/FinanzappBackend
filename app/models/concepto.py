@@ -33,5 +33,9 @@ class Concepto(SQLModel, table=True):
     # Fixed duration for gasto_fijo/ingreso recurrence (optional, immutable).
     # Not valid on deuda - see budget-concepts spec.
     duracion_meses: int | None = Field(default=None)
+    # Day of month (1-28) a deuda/gasto_fijo installment is due (optional).
+    # Purely informational/display - never feeds a calculation, so unlike the
+    # fields above it stays mutable at any time - see budget-concepts spec.
+    dia_vencimiento: int | None = Field(default=None)
     activo: bool = Field(default=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

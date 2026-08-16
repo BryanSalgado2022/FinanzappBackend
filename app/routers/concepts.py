@@ -28,6 +28,7 @@ def _to_read(session: Session, concepto: Concepto) -> ConceptoRead:
         numero_cuotas=concepto.numero_cuotas,
         cuota_fija=concept_service.cuota_fija(concepto),
         duracion_meses=concepto.duracion_meses,
+        dia_vencimiento=concepto.dia_vencimiento,
         activo=concepto.activo,
     )
 
@@ -49,6 +50,7 @@ def create_concept(
         periodo_tasa=payload.periodo_tasa,
         numero_cuotas=payload.numero_cuotas,
         duracion_meses=payload.duracion_meses,
+        dia_vencimiento=payload.dia_vencimiento,
     )
     today = date.today()
     if es_amortizada(concepto):
@@ -121,6 +123,7 @@ def update_concept(
             categoria=payload.categoria,
             activo=payload.activo,
             valor_total=payload.valor_total,
+            dia_vencimiento=payload.dia_vencimiento,
         )
     except ConceptoNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Concept not found") from exc

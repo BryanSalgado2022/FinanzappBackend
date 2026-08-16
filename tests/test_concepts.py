@@ -97,6 +97,61 @@ def test_remaining_balance_drops_when_marked_paid_without_amount(client: TestCli
     assert as_decimal(response.json()["saldo_restante"]) == Decimal("700.00")
 
 
+def test_create_debt_and_fixed_expense_with_due_day(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    for tipo in ("deuda", "gasto_fijo"):
+        response = client.post(
+            "/concepts",
+            json={"nombre": tipo, "tipo": tipo, "dia_vencimiento": 15},
+            headers=headers,
+        )
+        assert response.status_code == 201, response.text
+        assert response.json()["dia_vencimiento"] == 15
+
+
+def test_reject_dia_vencimiento_out_of_range(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    for dia in (0, 29):
+        response = client.post(
+            "/concepts",
+            json={"nombre": "Gasto", "tipo": "gasto_fijo", "dia_vencimiento": dia},
+            headers=headers,
+        )
+        assert response.status_code == 422
+
+
+def test_reject_dia_vencimiento_on_ingreso(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    response = client.post(
+        "/concepts",
+        json={"nombre": "Sueldo", "tipo": "ingreso", "dia_vencimiento": 15},
+        headers=headers,
+    )
+    assert response.status_code == 422
+
+
+def test_dia_vencimiento_editable_even_on_amortized_debt(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    create = client.post(
+        "/concepts",
+        json={
+            "nombre": "Credito",
+            "tipo": "deuda",
+            "valor_total": "1000000",
+            "tasa_interes": "1.5",
+            "numero_cuotas": 12,
+        },
+        headers=headers,
+    )
+    concept_id = create.json()["id"]
+
+    response = client.patch(
+        f"/concepts/{concept_id}", json={"dia_vencimiento": 20}, headers=headers
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["dia_vencimiento"] == 20
+
+
 def test_list_scoped_to_owner(client: TestClient, monkeypatch):
     headers_a = auth_headers(client, monkeypatch, sub="google-a", email="a@example.com", name="A")
     client.post("/concepts", json={"nombre": "A1", "tipo": "ingreso"}, headers=headers_a)

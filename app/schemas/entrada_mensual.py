@@ -17,3 +17,4 @@ class EntradaMensualRead(BaseModel):
     monto_planeado: Decimal
     monto_pagado: Decimal | None
     pagado: bool
+    vencida: bool

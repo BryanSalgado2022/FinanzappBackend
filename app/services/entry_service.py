@@ -9,6 +9,12 @@ from app.models.entrada_mensual import EntradaMensual
 RECURRING_TYPES = (TipoConcepto.DEUDA, TipoConcepto.GASTO_FIJO, TipoConcepto.INGRESO)
 
 
+def es_vencida(dia_vencimiento: int | None, anio: int, mes: int, pagado: bool) -> bool:
+    if dia_vencimiento is None or pagado:
+        return False
+    return date(anio, mes, dia_vencimiento) < date.today()
+
+
 def get_entry(session: Session, concepto_id: int, anio: int, mes: int) -> EntradaMensual | None:
     return session.exec(
         select(EntradaMensual).where(
