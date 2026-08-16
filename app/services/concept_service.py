@@ -2,8 +2,9 @@ from decimal import Decimal
 
 from sqlmodel import Session, func, select
 
-from app.models.concepto import Concepto, TipoConcepto
+from app.models.concepto import Concepto, PeriodoTasa, TipoConcepto
 from app.models.entrada_mensual import EntradaMensual
+from app.services.amortization_service import calcular_cuota_fija, tasa_mensual_desde
 
 
 class ConceptoNotFoundError(Exception):
@@ -17,9 +18,20 @@ def create_concepto(
     tipo: TipoConcepto,
     categoria: str | None,
     valor_total: Decimal | None,
+    *,
+    tasa_interes: Decimal | None = None,
+    periodo_tasa: PeriodoTasa | None = None,
+    numero_cuotas: int | None = None,
 ) -> Concepto:
     concepto = Concepto(
-        user_id=user_id, nombre=nombre, tipo=tipo, categoria=categoria, valor_total=valor_total
+        user_id=user_id,
+        nombre=nombre,
+        tipo=tipo,
+        categoria=categoria,
+        valor_total=valor_total,
+        tasa_interes=tasa_interes,
+        periodo_tasa=periodo_tasa,
+        numero_cuotas=numero_cuotas,
     )
     session.add(concepto)
     session.commit()
@@ -36,6 +48,10 @@ def get_concepto(session: Session, user_id: int, concepto_id: int) -> Concepto:
 
 def list_conceptos(session: Session, user_id: int) -> list[Concepto]:
     return list(session.exec(select(Concepto).where(Concepto.user_id == user_id)))
+
+
+def es_amortizada(concepto: Concepto) -> bool:
+    return concepto.tasa_interes is not None and concepto.numero_cuotas is not None
 
 
 def update_concepto(
@@ -58,6 +74,11 @@ def update_concepto(
     if valor_total is not None:
         if concepto.tipo != TipoConcepto.DEUDA:
             raise ValueError("valor_total is only allowed for concepts of type 'deuda'")
+        if es_amortizada(concepto):
+            raise ValueError(
+                "valor_total cannot be changed on a debt with amortization data; "
+                "delete this concept and create a new one instead"
+            )
         concepto.valor_total = valor_total
     session.add(concepto)
     session.commit()
@@ -81,3 +102,10 @@ def saldo_restante(session: Session, concepto: Concepto) -> Decimal | None:
     ).one()
     restante = concepto.valor_total - Decimal(total_pagado)
     return restante if restante > 0 else Decimal("0")
+
+
+def cuota_fija(concepto: Concepto) -> Decimal | None:
+    if not es_amortizada(concepto) or concepto.valor_total is None:
+        return None
+    tasa_mensual = tasa_mensual_desde(concepto.tasa_interes, concepto.periodo_tasa)
+    return calcular_cuota_fija(concepto.valor_total, tasa_mensual, concepto.numero_cuotas)

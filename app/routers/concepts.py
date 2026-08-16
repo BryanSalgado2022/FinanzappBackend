@@ -9,7 +9,8 @@ from app.models.concepto import Concepto, TipoConcepto
 from app.models.user import User
 from app.schemas.concepto import ConceptoCreate, ConceptoRead, ConceptoUpdate
 from app.services import concept_service, entry_service
-from app.services.concept_service import ConceptoNotFoundError
+from app.services.amortization_service import generar_tabla_amortizacion, tasa_mensual_desde
+from app.services.concept_service import ConceptoNotFoundError, es_amortizada
 
 router = APIRouter(prefix="/concepts", tags=["concepts"])
 
@@ -22,6 +23,10 @@ def _to_read(session: Session, concepto: Concepto) -> ConceptoRead:
         categoria=concepto.categoria,
         valor_total=concepto.valor_total,
         saldo_restante=concept_service.saldo_restante(session, concepto),
+        tasa_interes=concepto.tasa_interes,
+        periodo_tasa=concepto.periodo_tasa,
+        numero_cuotas=concepto.numero_cuotas,
+        cuota_fija=concept_service.cuota_fija(concepto),
         activo=concepto.activo,
     )
 
@@ -39,12 +44,19 @@ def create_concept(
         payload.tipo,
         payload.categoria,
         payload.valor_total,
+        tasa_interes=payload.tasa_interes,
+        periodo_tasa=payload.periodo_tasa,
+        numero_cuotas=payload.numero_cuotas,
     )
-    if payload.monto_planeado is not None and concepto.tipo in (
+    today = date.today()
+    if es_amortizada(concepto):
+        tasa_mensual = tasa_mensual_desde(concepto.tasa_interes, concepto.periodo_tasa)
+        tabla = generar_tabla_amortizacion(concepto.valor_total, tasa_mensual, concepto.numero_cuotas)
+        entry_service.generar_entradas_amortizacion(session, concepto, tabla, today.year, today.month)
+    elif payload.monto_planeado is not None and concepto.tipo in (
         TipoConcepto.DEUDA,
         TipoConcepto.GASTO_FIJO,
     ):
-        today = date.today()
         entry_service.upsert_monthly_entry(
             session,
             concepto,

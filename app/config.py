@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expires_minutes: int = 60 * 24 * 7
     cors_origins: str = "http://localhost:5173"
+    dev_mode: bool = False
 
     @property
     def cors_origins_list(self) -> list[str]:

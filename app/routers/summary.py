@@ -4,8 +4,9 @@ from sqlmodel import Session
 from app.database import get_session
 from app.dependencies import get_current_user
 from app.models.user import User
+from app.schemas.debts_summary import AnnualTrend
 from app.schemas.summary import MonthlySummary
-from app.services import summary_service
+from app.services import debts_summary_service, summary_service
 
 router = APIRouter(prefix="/summary", tags=["summary"])
 
@@ -18,3 +19,12 @@ def get_monthly_summary(
     session: Session = Depends(get_session),
 ) -> MonthlySummary:
     return summary_service.monthly_summary(session, current_user.id, anio, mes)
+
+
+@router.get("/annual", response_model=AnnualTrend)
+def get_annual_trend(
+    anio: int,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> AnnualTrend:
+    return debts_summary_service.annual_trend(session, current_user.id, anio)

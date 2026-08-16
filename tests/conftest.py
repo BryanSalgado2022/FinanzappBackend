@@ -5,6 +5,10 @@ from decimal import Decimal
 os.environ.setdefault("DATABASE_URL", "sqlite://")
 os.environ.setdefault("GOOGLE_CLIENT_ID", "test-client-id")
 os.environ.setdefault("JWT_SECRET", "test-secret")
+# Without this, Settings falls back to reading the real .env file's DEV_MODE
+# value (pydantic-settings env_file fallback), coupling test behavior to
+# whatever the developer's local .env happens to have set.
+os.environ["DEV_MODE"] = "false"
 
 import pytest
 from fastapi.testclient import TestClient

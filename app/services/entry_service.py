@@ -65,6 +65,31 @@ def _fill_forward(
     session.commit()
 
 
+def _sumar_meses(anio: int, mes: int, cantidad: int) -> tuple[int, int]:
+    total = (anio * 12 + (mes - 1)) + cantidad
+    return total // 12, total % 12 + 1
+
+
+def generar_entradas_amortizacion(
+    session: Session,
+    concepto: Concepto,
+    tabla: list[dict],
+    anio_inicio: int,
+    mes_inicio: int,
+) -> None:
+    """Creates one monthly entry per installment in an amortization schedule,
+    starting at anio_inicio/mes_inicio and spanning as many years as needed.
+    Never overwrites an existing entry, matching _fill_forward's guarantee."""
+    for fila in tabla:
+        anio, mes = _sumar_meses(anio_inicio, mes_inicio, fila["numero"] - 1)
+        if get_entry(session, concepto.id, anio, mes) is not None:
+            continue
+        session.add(
+            EntradaMensual(concepto_id=concepto.id, anio=anio, mes=mes, monto_planeado=fila["cuota"])
+        )
+    session.commit()
+
+
 def upsert_monthly_entry(
     session: Session,
     concepto: Concepto,

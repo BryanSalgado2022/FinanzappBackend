@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
+import app.routers.auth as auth_router
 from app.models.user import User
 from tests.conftest import auth_headers
 
@@ -37,3 +38,18 @@ def test_user_cannot_access_another_users_concept(client: TestClient, monkeypatc
     headers_b = auth_headers(client, monkeypatch, sub="google-b", email="b@example.com", name="B")
     response = client.get(f"/concepts/{concept_id}", headers=headers_b)
     assert response.status_code == 404
+
+
+def test_dev_login_disabled_by_default(client: TestClient):
+    response = client.post("/auth/dev-login")
+    assert response.status_code == 404
+
+
+def test_dev_login_works_when_explicitly_enabled(client: TestClient, monkeypatch):
+    class FakeSettings:
+        dev_mode = True
+
+    monkeypatch.setattr(auth_router, "get_settings", lambda: FakeSettings())
+    response = client.post("/auth/dev-login")
+    assert response.status_code == 200
+    assert "access_token" in response.json()

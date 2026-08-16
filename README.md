@@ -2,7 +2,7 @@
 
 API en FastAPI para el MVP de Finanzapp: registro de deudas, gastos fijos e ingresos, con presupuesto mensual y balance neto automático. Reemplaza el proceso manual del Excel `Presupuesto1`.
 
-Ver la planeación completa (por qué, requisitos, decisiones técnicas) en `openspec/changes/add-budget-mvp/` — `proposal.md`, `specs/`, `design.md`, `tasks.md`.
+Ver la planeación completa (por qué, requisitos, decisiones técnicas) en `openspec/specs/` (specs vigentes) y en los changes archivados: `openspec/changes/archive/2026-08-15-add-budget-mvp/` (MVP original) y `openspec/changes/add-debt-amortization/` (amortización de deudas + resúmenes).
 
 ## Stack
 
@@ -30,7 +30,7 @@ openspec/             # planeación spec-driven (proposal/specs/design/tasks)
 
 ## Correr en local con Docker (recomendado)
 
-1. Copia `.env.example` a `.env` y completa `GOOGLE_CLIENT_ID` y `JWT_SECRET` (para desarrollo local, `DATABASE_URL` ya viene apuntando al Postgres de docker-compose). `CORS_ORIGINS` ya trae `http://localhost:5173` (el dev server de `FinanzappFrontend`) por defecto — agrega ahí la URL de producción del frontend cuando la despliegues.
+1. Copia `.env.example` a `.env` y completa `GOOGLE_CLIENT_ID` y `JWT_SECRET` (para desarrollo local, `DATABASE_URL` ya viene apuntando al Postgres de docker-compose). `CORS_ORIGINS` ya trae `http://localhost:5173` (el dev server de `FinanzappFrontend`) por defecto — agrega ahí la URL de producción del frontend cuando la despliegues. Si Google OAuth real no está disponible (p. ej. mientras se propaga un cambio en Google Cloud Console), pon `DEV_MODE=true` para habilitar `POST /auth/dev-login`, que hace login sin pasar por Google — **nunca actives esto fuera de tu máquina local**.
 2. Levanta todo:
    ```bash
    docker compose up -d --build
@@ -85,19 +85,24 @@ Ese JWT se manda en cada request subsecuente como `Authorization: Bearer <token>
 | Método | Ruta | Descripción |
 |---|---|---|
 | POST | `/auth/google` | Login con Google, devuelve JWT propio |
-| POST | `/concepts` | Crear concepto (deuda / gasto_fijo / ingreso) |
+| POST | `/auth/dev-login` | Login sin Google, solo si `DEV_MODE=true` (404 si no) |
+| POST | `/concepts` | Crear concepto (deuda / gasto_fijo / ingreso; deudas aceptan `tasa_interes`+`periodo_tasa`+`numero_cuotas` opcionales) |
 | GET | `/concepts` | Listar conceptos del usuario autenticado |
-| GET | `/concepts/{id}` | Ver un concepto (incluye saldo restante si es deuda) |
-| PATCH | `/concepts/{id}` | Actualizar nombre/categoría/estado/valor_total |
-| DELETE | `/concepts/{id}` | Eliminar concepto |
+| GET | `/concepts/{id}` | Ver un concepto (incluye saldo restante y, si tiene amortización, `cuota_fija`) |
+| PATCH | `/concepts/{id}` | Actualizar nombre/categoría/estado/valor_total (valor_total no editable si la deuda tiene amortización) |
+| DELETE | `/concepts/{id}` | Eliminar concepto (elimina también sus entradas mensuales) |
 | GET | `/concepts/{id}/entries` | Listar entradas mensuales de un concepto |
 | PUT | `/concepts/{id}/entries/{anio}/{mes}` | Crear/actualizar el monto planeado/pagado de un mes |
 | GET | `/summary?anio=&mes=` | Balance neto del mes (ingresos - deudas - gastos fijos) |
+| GET | `/summary/annual?anio=` | Ingresos/gastos planeados por cada uno de los 12 meses del año |
+| GET | `/debts/summary` | Total adeudado, total pagado, % de progreso global y composición entre todas las deudas del usuario |
 
 Ver el contrato completo y ejemplos en `/docs` (Swagger) una vez la API está corriendo.
 
 ## Decisiones clave a recordar
 
 - El saldo restante de una deuda se calcula al vuelo (no se cachea) y se acumula entre años — nunca se reinicia el 1 de enero.
-- Crear un concepto `deuda`/`gasto_fijo` con `monto_planeado` autogenera las entradas del mes actual hasta diciembre del año en curso, sin sobreescribir meses que el usuario ya haya personalizado.
-- El backlog explícito (fuera de este MVP) está documentado en `openspec/changes/add-budget-mvp/proposal.md`: categorización de gastos por IA en lenguaje natural, amortización real de deudas (tasa/cuotas), multi-moneda, reportes y export a Excel/PDF.
+- Crear un concepto `deuda`/`gasto_fijo` con `monto_planeado` (sin amortización) autogenera las entradas del mes actual hasta diciembre del año en curso, sin sobreescribir meses que el usuario ya haya personalizado.
+- Una deuda con `tasa_interes` + `numero_cuotas` calcula la cuota fija (método francés) y genera **todo** el cronograma de una vez (puede cruzar años). `tasa_interes` anual se convierte a mensual con la fórmula de tasa efectiva (no `/12`), igual que la reportan los bancos colombianos.
+- `valor_total`, `tasa_interes`, `periodo_tasa` y `numero_cuotas` quedan **inmutables** en una deuda con amortización — para cambiar condiciones, se elimina el concepto y se crea uno nuevo (decisión explícita del usuario para evitar lógica de recálculo).
+- El backlog explícito está documentado en `openspec/changes/add-debt-amortization/proposal.md`: presupuesto por categorías tipo sobres (Necesidades/Deseos/Deudas/Futuro), función de importar datos, categorización de gastos por IA en lenguaje natural, multi-moneda.
