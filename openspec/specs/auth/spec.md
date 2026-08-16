@@ -1,7 +1,7 @@
 # auth Specification
 
 ## Purpose
-Lets users sign in with their Google account and ensures every subsequent request is scoped to their own data, with no password of their own to manage.
+Lets users sign in with their Google account or with a self-managed email/password, and ensures every subsequent request is scoped to their own data.
 
 ## Requirements
 

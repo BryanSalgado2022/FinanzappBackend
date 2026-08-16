@@ -17,6 +17,16 @@ from sqlmodel import Session, SQLModel, create_engine
 
 from app.database import get_session
 from app.main import app
+from app.services.rate_limit import reset_rate_limits
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limits():
+    # The rate limiter's counters live at module scope (see
+    # app/services/rate_limit.py) - without this, one test's login/register
+    # attempts could trip another test's limit.
+    reset_rate_limits()
+    yield
 
 
 @pytest.fixture(name="engine")

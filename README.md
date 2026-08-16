@@ -85,6 +85,8 @@ Ese JWT se manda en cada request subsecuente como `Authorization: Bearer <token>
 | Método | Ruta | Descripción |
 |---|---|---|
 | POST | `/auth/google` | Login con Google, devuelve JWT propio |
+| POST | `/auth/register` | Crear cuenta con nombre/email/password (min. 8 caracteres), devuelve JWT. 409 si el email ya existe. Rate-limited. |
+| POST | `/auth/login` | Login con email/password, devuelve JWT. 401 genérico si el email no existe o la password no coincide. Rate-limited. |
 | POST | `/auth/dev-login` | Login sin Google, solo si `DEV_MODE=true` (404 si no) |
 | POST | `/concepts` | Crear concepto (deuda / gasto_fijo / ingreso; deudas aceptan `tasa_interes`+`periodo_tasa`+`numero_cuotas` opcionales) |
 | GET | `/concepts` | Listar conceptos del usuario autenticado |
@@ -107,4 +109,5 @@ Ver el contrato completo y ejemplos en `/docs` (Swagger) una vez la API está co
 - `gasto_fijo`/`ingreso` pueden llevar `duracion_meses` (opcional, no aplica a `deuda`): genera exactamente esa cantidad de meses de una vez, igual que una amortización pero con un monto fijo repetido, y luego deja de generar — útil para un ingreso o gasto temporal con fecha de fin conocida.
 - `valor_total`, `tasa_interes`, `periodo_tasa`, `numero_cuotas` y `duracion_meses` quedan **inmutables** una vez creado el concepto — para cambiar condiciones, se elimina el concepto y se crea uno nuevo (decisión explícita del usuario para evitar lógica de recálculo).
 - `deuda`/`gasto_fijo` pueden llevar `dia_vencimiento` (1-28, opcional, no aplica a `ingreso`) — a diferencia de los campos anteriores, es **siempre editable** porque es puramente informativo y no dispara ningún recálculo. Cada entrada mensual expone `vencida` (calculado al vuelo: no pagada y con fecha de vencimiento ya pasada).
+- Login por email/password convive con Google: si alguien inicia sesión con Google usando un email que ya tiene cuenta por contraseña, el `google_sub` se **vincula automáticamente** a esa cuenta (el token de Google prueba que es dueño del correo). El registro por contraseña, en cambio, **siempre rechaza** un email ya usado (por Google o por otra contraseña) — nunca "reclama" una cuenta existente, porque no hay verificación de que el registrante sea el dueño real del correo. `/auth/register` y `/auth/login` tienen rate limiting en memoria (10 intentos / 5 min por IP); `/auth/google` no lo necesita porque ya depende de un token válido de Google. Sin verificación de email ni recuperación de contraseña por ahora (backlog futuro, diseñado para agregarse sin romper nada).
 - El backlog explícito está documentado en `openspec/changes/archive/2026-08-15-add-debt-amortization/proposal.md`: presupuesto por categorías tipo sobres (Necesidades/Deseos/Deudas/Futuro), función de importar datos, categorización de gastos por IA en lenguaje natural, multi-moneda.

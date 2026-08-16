@@ -3,13 +3,18 @@ from sqlmodel import Session
 
 from app.config import get_settings
 from app.database import get_session
-from app.schemas.auth import GoogleSignInRequest, TokenResponse
+from app.schemas.auth import GoogleSignInRequest, LoginRequest, RegisterRequest, TokenResponse
 from app.services.auth_service import (
+    EmailAlreadyRegisteredError,
+    InvalidCredentialsError,
     InvalidGoogleTokenError,
+    authenticate_with_password,
     create_access_token,
     get_or_create_user,
+    register_user,
     verify_google_id_token,
 )
+from app.services.rate_limit import rate_limiter
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -31,6 +36,39 @@ def sign_in_with_google(
         email=claims["email"],
         name=claims.get("name", claims["email"]),
     )
+    token = create_access_token(user)
+    return TokenResponse(access_token=token)
+
+
+@router.post(
+    "/register",
+    response_model=TokenResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limiter("register"))],
+)
+def register(payload: RegisterRequest, session: Session = Depends(get_session)) -> TokenResponse:
+    try:
+        user = register_user(session, payload.nombre, payload.email, payload.password)
+    except EmailAlreadyRegisteredError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
+        ) from exc
+    token = create_access_token(user)
+    return TokenResponse(access_token=token)
+
+
+@router.post(
+    "/login",
+    response_model=TokenResponse,
+    dependencies=[Depends(rate_limiter("login"))],
+)
+def login(payload: LoginRequest, session: Session = Depends(get_session)) -> TokenResponse:
+    try:
+        user = authenticate_with_password(session, payload.email, payload.password)
+    except InvalidCredentialsError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
+        ) from exc
     token = create_access_token(user)
     return TokenResponse(access_token=token)
 
