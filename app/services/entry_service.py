@@ -43,7 +43,10 @@ def _save_entry(
     if entry is None:
         entry = EntradaMensual(concepto_id=concepto_id, anio=anio, mes=mes)
     entry.monto_planeado = monto_planeado
-    entry.monto_pagado = monto_pagado
+    # Marking an entry paid without a specific amount means "I paid what was
+    # planned" - saldo_restante and the debts summary sum monto_pagado, not
+    # the pagado flag, so leaving it null here would silently not count it.
+    entry.monto_pagado = monto_pagado if monto_pagado is not None else (monto_planeado if pagado else None)
     entry.pagado = pagado
     session.add(entry)
     session.commit()

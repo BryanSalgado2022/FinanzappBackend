@@ -78,6 +78,25 @@ def test_remaining_balance_zero_when_fully_paid(client: TestClient, monkeypatch)
     assert as_decimal(response.json()["saldo_restante"]) == Decimal("0")
 
 
+def test_remaining_balance_drops_when_marked_paid_without_amount(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    create = client.post(
+        "/concepts",
+        json={"nombre": "Prestamo", "tipo": "deuda", "valor_total": "1000.00"},
+        headers=headers,
+    )
+    concept_id = create.json()["id"]
+
+    client.put(
+        f"/concepts/{concept_id}/entries/2024/1",
+        json={"monto_planeado": "300.00", "pagado": True},
+        headers=headers,
+    )
+
+    response = client.get(f"/concepts/{concept_id}", headers=headers)
+    assert as_decimal(response.json()["saldo_restante"]) == Decimal("700.00")
+
+
 def test_list_scoped_to_owner(client: TestClient, monkeypatch):
     headers_a = auth_headers(client, monkeypatch, sub="google-a", email="a@example.com", name="A")
     client.post("/concepts", json={"nombre": "A1", "tipo": "ingreso"}, headers=headers_a)
