@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: finanzapp
+      POSTGRES_PASSWORD: finanzapp
+      POSTGRES_DB: finanzapp
+    ports:
+      - "5433:5432"
+    volumes:
+      - finanzapp_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finanzapp"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://finanzapp:finanzapp@db:5432/finanzapp
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - .:/code
+
+volumes:
+  finanzapp_db_data:

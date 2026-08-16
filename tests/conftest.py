@@ -1,0 +1,64 @@
+import os
+from collections.abc import Generator
+from decimal import Decimal
+
+os.environ.setdefault("DATABASE_URL", "sqlite://")
+os.environ.setdefault("GOOGLE_CLIENT_ID", "test-client-id")
+os.environ.setdefault("JWT_SECRET", "test-secret")
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy.pool import StaticPool
+from sqlmodel import Session, SQLModel, create_engine
+
+from app.database import get_session
+from app.main import app
+
+
+@pytest.fixture(name="engine")
+def engine_fixture():
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    SQLModel.metadata.create_all(engine)
+    yield engine
+    SQLModel.metadata.drop_all(engine)
+
+
+@pytest.fixture(name="session")
+def session_fixture(engine) -> Generator[Session, None, None]:
+    with Session(engine) as session:
+        yield session
+
+
+@pytest.fixture(name="client")
+def client_fixture(session: Session) -> Generator[TestClient, None, None]:
+    def get_session_override():
+        return session
+
+    app.dependency_overrides[get_session] = get_session_override
+    with TestClient(app) as client:
+        yield client
+    app.dependency_overrides.clear()
+
+
+def auth_headers(client: TestClient, monkeypatch, *, sub: str, email: str, name: str) -> dict[str, str]:
+    """Signs a user in by faking Google's ID-token verification (no real
+    Google credentials involved) and returns bearer headers for that user."""
+    import app.routers.auth as auth_router
+
+    monkeypatch.setattr(
+        auth_router,
+        "verify_google_id_token",
+        lambda token: {"sub": sub, "email": email, "name": name},
+    )
+    response = client.post("/auth/google", json={"id_token": "fake-token"})
+    assert response.status_code == 200
+    token = response.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+def as_decimal(value) -> Decimal:
+    """Compares JSON-serialized money fields regardless of whether they came
+    back as a JSON string or a number."""
+    return Decimal(str(value))
