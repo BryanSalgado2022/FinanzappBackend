@@ -27,6 +27,7 @@ def _to_read(session: Session, concepto: Concepto) -> ConceptoRead:
         periodo_tasa=concepto.periodo_tasa,
         numero_cuotas=concepto.numero_cuotas,
         cuota_fija=concept_service.cuota_fija(concepto),
+        duracion_meses=concepto.duracion_meses,
         activo=concepto.activo,
     )
 
@@ -47,15 +48,30 @@ def create_concept(
         tasa_interes=payload.tasa_interes,
         periodo_tasa=payload.periodo_tasa,
         numero_cuotas=payload.numero_cuotas,
+        duracion_meses=payload.duracion_meses,
     )
     today = date.today()
     if es_amortizada(concepto):
         tasa_mensual = tasa_mensual_desde(concepto.tasa_interes, concepto.periodo_tasa)
         tabla = generar_tabla_amortizacion(concepto.valor_total, tasa_mensual, concepto.numero_cuotas)
         entry_service.generar_entradas_amortizacion(session, concepto, tabla, today.year, today.month)
+    elif (
+        payload.monto_planeado is not None
+        and payload.duracion_meses is not None
+        and concepto.tipo in (TipoConcepto.GASTO_FIJO, TipoConcepto.INGRESO)
+    ):
+        entry_service.generar_entradas_recurrentes(
+            session,
+            concepto,
+            payload.monto_planeado,
+            today.year,
+            today.month,
+            payload.duracion_meses,
+        )
     elif payload.monto_planeado is not None and concepto.tipo in (
         TipoConcepto.DEUDA,
         TipoConcepto.GASTO_FIJO,
+        TipoConcepto.INGRESO,
     ):
         entry_service.upsert_monthly_entry(
             session,

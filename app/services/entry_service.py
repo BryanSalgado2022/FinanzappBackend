@@ -6,7 +6,7 @@ from sqlmodel import Session, select
 from app.models.concepto import Concepto, TipoConcepto
 from app.models.entrada_mensual import EntradaMensual
 
-RECURRING_TYPES = (TipoConcepto.DEUDA, TipoConcepto.GASTO_FIJO)
+RECURRING_TYPES = (TipoConcepto.DEUDA, TipoConcepto.GASTO_FIJO, TipoConcepto.INGRESO)
 
 
 def get_entry(session: Session, concepto_id: int, anio: int, mes: int) -> EntradaMensual | None:
@@ -90,6 +90,29 @@ def generar_entradas_amortizacion(
     session.commit()
 
 
+def generar_entradas_recurrentes(
+    session: Session,
+    concepto: Concepto,
+    monto_planeado: Decimal,
+    anio_inicio: int,
+    mes_inicio: int,
+    duracion_meses: int,
+) -> None:
+    """Creates exactly `duracion_meses` consecutive monthly entries starting at
+    anio_inicio/mes_inicio, all using the same flat monto_planeado, spanning as
+    many years as needed. Mirrors generar_entradas_amortizacion's shape (known
+    length, generated fully at creation) but with a flat amount instead of a
+    computed schedule. Never overwrites an existing entry."""
+    for offset in range(duracion_meses):
+        anio, mes = _sumar_meses(anio_inicio, mes_inicio, offset)
+        if get_entry(session, concepto.id, anio, mes) is not None:
+            continue
+        session.add(
+            EntradaMensual(concepto_id=concepto.id, anio=anio, mes=mes, monto_planeado=monto_planeado)
+        )
+    session.commit()
+
+
 def upsert_monthly_entry(
     session: Session,
     concepto: Concepto,
@@ -112,7 +135,15 @@ def upsert_monthly_entry(
 
     today = date.today()
     is_current_month = anio == today.year and mes == today.month
-    if concepto.tipo in RECURRING_TYPES and concepto.activo and is_current_month:
+    tiene_ventana_fija = concepto.duracion_meses is not None or (
+        concepto.tasa_interes is not None and concepto.numero_cuotas is not None
+    )
+    if (
+        concepto.tipo in RECURRING_TYPES
+        and concepto.activo
+        and is_current_month
+        and not tiene_ventana_fija
+    ):
         _fill_forward(session, concepto, monto_planeado, anio, mes + 1)
 
     return entry

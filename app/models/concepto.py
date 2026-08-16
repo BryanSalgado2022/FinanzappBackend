@@ -30,5 +30,8 @@ class Concepto(SQLModel, table=True):
     tasa_interes: Decimal | None = Field(default=None, max_digits=7, decimal_places=4)
     periodo_tasa: PeriodoTasa | None = Field(default=None)
     numero_cuotas: int | None = Field(default=None)
+    # Fixed duration for gasto_fijo/ingreso recurrence (optional, immutable).
+    # Not valid on deuda - see budget-concepts spec.
+    duracion_meses: int | None = Field(default=None)
     activo: bool = Field(default=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

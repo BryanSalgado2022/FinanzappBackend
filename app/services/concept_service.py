@@ -22,6 +22,7 @@ def create_concepto(
     tasa_interes: Decimal | None = None,
     periodo_tasa: PeriodoTasa | None = None,
     numero_cuotas: int | None = None,
+    duracion_meses: int | None = None,
 ) -> Concepto:
     concepto = Concepto(
         user_id=user_id,
@@ -32,6 +33,7 @@ def create_concepto(
         tasa_interes=tasa_interes,
         periodo_tasa=periodo_tasa,
         numero_cuotas=numero_cuotas,
+        duracion_meses=duracion_meses,
     )
     session.add(concepto)
     session.commit()

@@ -20,6 +20,10 @@ class ConceptoCreate(BaseModel):
     tasa_interes: Decimal | None = None
     periodo_tasa: PeriodoTasa | None = None
     numero_cuotas: int | None = None
+    # Fixed duration for gasto_fijo/ingreso recurrence (optional, immutable,
+    # not valid on deuda). When set together with monto_planeado, generates
+    # exactly that many months at creation instead of the open-ended behavior.
+    duracion_meses: int | None = None
 
     @model_validator(mode="after")
     def validate_valor_total(self) -> "ConceptoCreate":
@@ -44,6 +48,12 @@ class ConceptoCreate(BaseModel):
 
         return self
 
+    @model_validator(mode="after")
+    def validate_duracion(self) -> "ConceptoCreate":
+        if self.duracion_meses is not None and self.tipo == TipoConcepto.DEUDA:
+            raise ValueError("duracion_meses is not allowed for concepts of type 'deuda'")
+        return self
+
 
 class ConceptoUpdate(BaseModel):
     nombre: str | None = None
@@ -63,4 +73,5 @@ class ConceptoRead(BaseModel):
     periodo_tasa: PeriodoTasa | None
     numero_cuotas: int | None
     cuota_fija: Decimal | None
+    duracion_meses: int | None
     activo: bool
