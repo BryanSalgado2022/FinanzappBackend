@@ -95,6 +95,7 @@ Ese JWT se manda en cada request subsecuente como `Authorization: Bearer <token>
 | DELETE | `/concepts/{id}` | Eliminar concepto (elimina también sus entradas mensuales) |
 | GET | `/concepts/{id}/entries` | Listar entradas mensuales de un concepto |
 | PUT | `/concepts/{id}/entries/{anio}/{mes}` | Crear/actualizar el monto planeado/pagado de un mes |
+| DELETE | `/concepts/{id}/entries/{anio}/{mes}` | Eliminar una entrada mensual individual. Solo en conceptos recurrentes indefinidos (409 si el concepto tiene amortización o `duracion_meses`). 404 si la entrada no existe. |
 | GET | `/summary?anio=&mes=` | Balance neto del mes (ingresos - deudas - gastos fijos) |
 | GET | `/summary/annual?anio=` | Ingresos/gastos planeados por cada uno de los 12 meses del año |
 | GET | `/debts/summary` | Total adeudado, total pagado, % de progreso global y composición entre todas las deudas del usuario |

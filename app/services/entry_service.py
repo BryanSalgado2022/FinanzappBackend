@@ -9,6 +9,14 @@ from app.models.entrada_mensual import EntradaMensual
 RECURRING_TYPES = (TipoConcepto.DEUDA, TipoConcepto.GASTO_FIJO, TipoConcepto.INGRESO)
 
 
+class EntradaConVentanaFijaError(Exception):
+    pass
+
+
+class EntryNotFoundError(Exception):
+    pass
+
+
 def es_vencida(dia_vencimiento: int | None, anio: int, mes: int, pagado: bool) -> bool:
     if dia_vencimiento is None or pagado:
         return False
@@ -23,6 +31,23 @@ def get_entry(session: Session, concepto_id: int, anio: int, mes: int) -> Entrad
             EntradaMensual.mes == mes,
         )
     ).first()
+
+
+def delete_entry(session: Session, concepto: Concepto, anio: int, mes: int) -> None:
+    """Deletes a single monthly entry, restoring that month to "no entry".
+    Rejected for concepts with a fixed window (amortization or
+    duracion_meses) - removing one installment from a generated schedule
+    would leave an incoherent gap in it."""
+    tiene_ventana_fija = concepto.duracion_meses is not None or (
+        concepto.tasa_interes is not None and concepto.numero_cuotas is not None
+    )
+    if tiene_ventana_fija:
+        raise EntradaConVentanaFijaError()
+    entry = get_entry(session, concepto.id, anio, mes)
+    if entry is None:
+        raise EntryNotFoundError()
+    session.delete(entry)
+    session.commit()
 
 
 def list_entries(session: Session, concepto_id: int) -> list[EntradaMensual]:

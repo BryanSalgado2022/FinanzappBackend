@@ -9,6 +9,7 @@ from app.models.user import User
 from app.schemas.entrada_mensual import EntradaMensualRead, EntradaMensualUpsert
 from app.services import concept_service, entry_service
 from app.services.concept_service import ConceptoNotFoundError
+from app.services.entry_service import EntradaConVentanaFijaError, EntryNotFoundError
 
 router = APIRouter(prefix="/concepts/{concepto_id}/entries", tags=["entries"])
 
@@ -67,3 +68,29 @@ def upsert_entry(
         pagado=payload.pagado,
     )
     return _to_entry_read(concepto, entry)
+
+
+@router.delete("/{anio}/{mes}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_entry(
+    concepto_id: int,
+    anio: int,
+    mes: int,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> None:
+    if not 1 <= mes <= 12:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="mes must be 1-12")
+    try:
+        concepto = concept_service.get_concepto(session, current_user.id, concepto_id)
+    except ConceptoNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Concept not found") from exc
+
+    try:
+        entry_service.delete_entry(session, concepto, anio, mes)
+    except EntradaConVentanaFijaError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot delete an entry from a concept with a fixed schedule (amortization or duracion_meses)",
+        ) from exc
+    except EntryNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found") from exc
