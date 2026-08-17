@@ -36,6 +36,7 @@ def list_entries(
         concepto = concept_service.get_concepto(session, current_user.id, concepto_id)
     except ConceptoNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Concept not found") from exc
+    entry_service.asegurar_entradas_anio_actual(session, concepto)
     entries = entry_service.list_entries(session, concepto_id)
     return [_to_entry_read(concepto, entry) for entry in entries]
 

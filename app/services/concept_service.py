@@ -4,7 +4,11 @@ from sqlmodel import Session, func, select
 
 from app.models.concepto import Concepto, PeriodoTasa, TipoConcepto
 from app.models.entrada_mensual import EntradaMensual
-from app.services.amortization_service import calcular_cuota_fija, tasa_mensual_desde
+from app.services.amortization_service import (
+    calcular_cuota_fija,
+    generar_tabla_amortizacion,
+    tasa_mensual_desde,
+)
 
 
 class ConceptoNotFoundError(Exception):
@@ -22,6 +26,7 @@ def create_concepto(
     tasa_interes: Decimal | None = None,
     periodo_tasa: PeriodoTasa | None = None,
     numero_cuotas: int | None = None,
+    cuota_inicial: int | None = None,
     duracion_meses: int | None = None,
     dia_vencimiento: int | None = None,
 ) -> Concepto:
@@ -34,6 +39,7 @@ def create_concepto(
         tasa_interes=tasa_interes,
         periodo_tasa=periodo_tasa,
         numero_cuotas=numero_cuotas,
+        cuota_inicial=cuota_inicial,
         duracion_meses=duracion_meses,
         dia_vencimiento=dia_vencimiento,
     )
@@ -68,6 +74,7 @@ def update_concepto(
     activo: bool | None = None,
     valor_total: Decimal | None = None,
     dia_vencimiento: int | None = None,
+    cuota_inicial: int | None = None,
 ) -> Concepto:
     concepto = get_concepto(session, user_id, concepto_id)
     if nombre is not None:
@@ -76,6 +83,11 @@ def update_concepto(
         concepto.categoria = categoria
     if activo is not None:
         concepto.activo = activo
+    if cuota_inicial is not None:
+        raise ValueError(
+            "cuota_inicial cannot be changed after creation; "
+            "delete this concept and create a new one instead"
+        )
     if valor_total is not None:
         if concepto.tipo != TipoConcepto.DEUDA:
             raise ValueError("valor_total is only allowed for concepts of type 'deuda'")
@@ -104,6 +116,20 @@ def delete_concepto(session: Session, user_id: int, concepto_id: int) -> None:
     session.commit()
 
 
+def valor_total_efectivo(concepto: Concepto) -> Decimal | None:
+    """The debt's starting amount for saldo_restante purposes - valor_total,
+    unless cuota_inicial skips past some installments, in which case it's the
+    schedule's balance right after the installment before cuota_inicial (those
+    earlier installments never have entries or monto_pagado in this system)."""
+    if concepto.valor_total is None:
+        return None
+    if not concepto.cuota_inicial or concepto.cuota_inicial <= 1 or not es_amortizada(concepto):
+        return concepto.valor_total
+    tasa_mensual = tasa_mensual_desde(concepto.tasa_interes, concepto.periodo_tasa)
+    tabla = generar_tabla_amortizacion(concepto.valor_total, tasa_mensual, concepto.numero_cuotas)
+    return tabla[concepto.cuota_inicial - 2]["saldo"]
+
+
 def saldo_restante(session: Session, concepto: Concepto) -> Decimal | None:
     if concepto.tipo != TipoConcepto.DEUDA or concepto.valor_total is None:
         return None
@@ -112,7 +138,7 @@ def saldo_restante(session: Session, concepto: Concepto) -> Decimal | None:
             EntradaMensual.concepto_id == concepto.id
         )
     ).one()
-    restante = concepto.valor_total - Decimal(total_pagado)
+    restante = valor_total_efectivo(concepto) - Decimal(total_pagado)
     return restante if restante > 0 else Decimal("0")
 
 

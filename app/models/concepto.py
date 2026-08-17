@@ -30,6 +30,10 @@ class Concepto(SQLModel, table=True):
     tasa_interes: Decimal | None = Field(default=None, max_digits=7, decimal_places=4)
     periodo_tasa: PeriodoTasa | None = Field(default=None)
     numero_cuotas: int | None = Field(default=None)
+    # Installment number to start generating entries from (amortization only,
+    # optional, immutable) - for a debt the user already had before this app,
+    # already paid up through cuota_inicial-1 outside the system.
+    cuota_inicial: int | None = Field(default=None)
     # Fixed duration for gasto_fijo/ingreso recurrence (optional, immutable).
     # Not valid on deuda - see budget-concepts spec.
     duracion_meses: int | None = Field(default=None)

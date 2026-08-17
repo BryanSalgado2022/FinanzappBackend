@@ -27,6 +27,7 @@ def _to_read(session: Session, concepto: Concepto) -> ConceptoRead:
         periodo_tasa=concepto.periodo_tasa,
         numero_cuotas=concepto.numero_cuotas,
         cuota_fija=concept_service.cuota_fija(concepto),
+        cuota_inicial=concepto.cuota_inicial,
         duracion_meses=concepto.duracion_meses,
         dia_vencimiento=concepto.dia_vencimiento,
         activo=concepto.activo,
@@ -50,6 +51,7 @@ def create_concept(
         tasa_interes=payload.tasa_interes,
         periodo_tasa=payload.periodo_tasa,
         numero_cuotas=payload.numero_cuotas,
+        cuota_inicial=payload.cuota_inicial,
         duracion_meses=payload.duracion_meses,
         dia_vencimiento=payload.dia_vencimiento,
     )
@@ -59,7 +61,14 @@ def create_concept(
     if es_amortizada(concepto):
         tasa_mensual = tasa_mensual_desde(concepto.tasa_interes, concepto.periodo_tasa)
         tabla = generar_tabla_amortizacion(concepto.valor_total, tasa_mensual, concepto.numero_cuotas)
-        entry_service.generar_entradas_amortizacion(session, concepto, tabla, today.year, today.month)
+        entry_service.generar_entradas_amortizacion(
+            session,
+            concepto,
+            tabla,
+            today.year,
+            today.month,
+            cuota_inicial=concepto.cuota_inicial or 1,
+        )
     elif (
         payload.monto_planeado is not None
         and payload.duracion_meses is not None
@@ -127,6 +136,7 @@ def update_concept(
             activo=payload.activo,
             valor_total=payload.valor_total,
             dia_vencimiento=payload.dia_vencimiento,
+            cuota_inicial=payload.cuota_inicial,
         )
     except ConceptoNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Concept not found") from exc

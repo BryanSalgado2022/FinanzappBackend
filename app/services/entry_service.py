@@ -35,6 +35,40 @@ def list_entries(session: Session, concepto_id: int) -> list[EntradaMensual]:
     )
 
 
+def asegurar_entradas_anio_actual(session: Session, concepto: Concepto) -> None:
+    """Lazily extends an indefinite recurring concept into a new calendar
+    year: if it's missing an entry for the real current month, fills through
+    December of the current year using the most recently known planned
+    amount. Called from the entries GET endpoint - safe to call every time,
+    it's a no-op once the gap is filled. Fixed-window concepts (duracion_meses
+    or amortization) never need this, since their whole window is generated
+    up front at creation."""
+    if concepto.tipo not in RECURRING_TYPES or not concepto.activo:
+        return
+    tiene_ventana_fija = concepto.duracion_meses is not None or (
+        concepto.tasa_interes is not None and concepto.numero_cuotas is not None
+    )
+    if tiene_ventana_fija:
+        return
+    today = date.today()
+    if get_entry(session, concepto.id, today.year, today.month) is not None:
+        return
+    ultima_entrada = session.exec(
+        select(EntradaMensual)
+        .where(EntradaMensual.concepto_id == concepto.id)
+        .order_by(EntradaMensual.anio.desc(), EntradaMensual.mes.desc())
+    ).first()
+    if ultima_entrada is None:
+        return
+    # If the latest known entry is actually in the future (e.g. a concept
+    # seeded for a future month via the anio/mes override on creation), there
+    # is no past gap to catch up - only trigger this when catching up *from*
+    # an entry that's genuinely behind the real current month.
+    if (ultima_entrada.anio, ultima_entrada.mes) > (today.year, today.month):
+        return
+    _fill_forward(session, concepto, ultima_entrada.monto_planeado, today.year, today.month)
+
+
 def _save_entry(
     session: Session,
     concepto_id: int,
@@ -85,12 +119,18 @@ def generar_entradas_amortizacion(
     tabla: list[dict],
     anio_inicio: int,
     mes_inicio: int,
+    cuota_inicial: int = 1,
 ) -> None:
-    """Creates one monthly entry per installment in an amortization schedule,
-    starting at anio_inicio/mes_inicio and spanning as many years as needed.
-    Never overwrites an existing entry, matching _fill_forward's guarantee."""
+    """Creates one monthly entry per installment in an amortization schedule
+    from cuota_inicial through the end of tabla, starting at anio_inicio/
+    mes_inicio (the first *generated* installment always lands there,
+    regardless of its number in the schedule) and spanning as many years as
+    needed. Never overwrites an existing entry, matching _fill_forward's
+    guarantee."""
     for fila in tabla:
-        anio, mes = _sumar_meses(anio_inicio, mes_inicio, fila["numero"] - 1)
+        if fila["numero"] < cuota_inicial:
+            continue
+        anio, mes = _sumar_meses(anio_inicio, mes_inicio, fila["numero"] - cuota_inicial)
         if get_entry(session, concepto.id, anio, mes) is not None:
             continue
         session.add(

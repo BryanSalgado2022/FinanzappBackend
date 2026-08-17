@@ -21,6 +21,10 @@ class ConceptoCreate(BaseModel):
     tasa_interes: Decimal | None = None
     periodo_tasa: PeriodoTasa | None = None
     numero_cuotas: int | None = None
+    # Installment number to start generating entries from (optional,
+    # amortization-only, immutable). For a debt already partway paid outside
+    # the app - installments before this one are treated as already settled.
+    cuota_inicial: int | None = Field(default=None, ge=1)
     # Fixed duration for gasto_fijo/ingreso recurrence (optional, immutable,
     # not valid on deuda). When set together with monto_planeado, generates
     # exactly that many months at creation instead of the open-ended behavior.
@@ -72,6 +76,16 @@ class ConceptoCreate(BaseModel):
             raise ValueError("dia_vencimiento is not allowed for concepts of type 'ingreso'")
         return self
 
+    @model_validator(mode="after")
+    def validate_cuota_inicial(self) -> "ConceptoCreate":
+        if self.cuota_inicial is None:
+            return self
+        if self.tasa_interes is None or self.numero_cuotas is None:
+            raise ValueError("cuota_inicial requires tasa_interes and numero_cuotas to be set")
+        if self.cuota_inicial > self.numero_cuotas:
+            raise ValueError("cuota_inicial cannot be greater than numero_cuotas")
+        return self
+
 
 class ConceptoUpdate(BaseModel):
     nombre: str | None = None
@@ -79,6 +93,9 @@ class ConceptoUpdate(BaseModel):
     activo: bool | None = None
     valor_total: Decimal | None = None
     dia_vencimiento: int | None = Field(default=None, ge=1, le=28)
+    # Accepted only so it can be explicitly rejected with a clear message in
+    # concept_service.update_concepto - cuota_inicial is always immutable.
+    cuota_inicial: int | None = None
 
 
 class ConceptoRead(BaseModel):
@@ -92,6 +109,7 @@ class ConceptoRead(BaseModel):
     periodo_tasa: PeriodoTasa | None
     numero_cuotas: int | None
     cuota_fija: Decimal | None
+    cuota_inicial: int | None
     duracion_meses: int | None
     dia_vencimiento: int | None
     activo: bool
