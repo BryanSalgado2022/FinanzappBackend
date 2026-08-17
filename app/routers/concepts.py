@@ -53,6 +53,8 @@ def create_concept(
         dia_vencimiento=payload.dia_vencimiento,
     )
     today = date.today()
+    anio = payload.anio or today.year
+    mes = payload.mes or today.month
     if es_amortizada(concepto):
         tasa_mensual = tasa_mensual_desde(concepto.tasa_interes, concepto.periodo_tasa)
         tabla = generar_tabla_amortizacion(concepto.valor_total, tasa_mensual, concepto.numero_cuotas)
@@ -66,8 +68,8 @@ def create_concept(
             session,
             concepto,
             payload.monto_planeado,
-            today.year,
-            today.month,
+            anio,
+            mes,
             payload.duracion_meses,
         )
     elif payload.monto_planeado is not None and concepto.tipo in (
@@ -78,8 +80,8 @@ def create_concept(
         entry_service.upsert_monthly_entry(
             session,
             concepto,
-            today.year,
-            today.month,
+            anio,
+            mes,
             monto_planeado=payload.monto_planeado,
         )
     return _to_read(session, concepto)

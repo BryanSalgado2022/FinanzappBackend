@@ -27,6 +27,14 @@ class ConceptoCreate(BaseModel):
     # Day of month (1-28) an installment is due (optional, deuda/gasto_fijo
     # only). Purely informational - editable at any time, see ConceptoUpdate.
     dia_vencimiento: int | None = Field(default=None, ge=1, le=28)
+    # Which year/month monto_planeado (and duracion_meses's window) should be
+    # seeded into - defaults to the server's current year/month when omitted.
+    # Lets the frontend create a concept for whatever month it's currently
+    # viewing (e.g. a year-end bonus while browsing December) instead of
+    # always landing in the real current month. Not used for amortized debts,
+    # whose schedule is always anchored to the real creation date.
+    anio: int | None = None
+    mes: int | None = Field(default=None, ge=1, le=12)
 
     @model_validator(mode="after")
     def validate_valor_total(self) -> "ConceptoCreate":

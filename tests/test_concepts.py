@@ -17,6 +17,25 @@ def test_create_each_concept_type(client: TestClient, monkeypatch):
         assert response.json()["tipo"] == tipo
 
 
+def test_create_seeds_explicit_year_month_not_server_today(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    response = client.post(
+        "/concepts",
+        json={
+            "nombre": "Prima",
+            "tipo": "ingreso",
+            "monto_planeado": "500000",
+            "anio": 2027,
+            "mes": 3,
+        },
+        headers=headers,
+    )
+    concept_id = response.json()["id"]
+
+    entries = client.get(f"/concepts/{concept_id}/entries", headers=headers).json()
+    assert [(e["anio"], e["mes"]) for e in entries] == [(2027, 3)]
+
+
 def test_reject_invalid_tipo(client: TestClient, monkeypatch):
     headers = _headers(client, monkeypatch)
     response = client.post(
