@@ -30,6 +30,7 @@ def _to_read(session: Session, concepto: Concepto) -> ConceptoRead:
         duracion_meses=concepto.duracion_meses,
         dia_vencimiento=concepto.dia_vencimiento,
         activo=concepto.activo,
+        created_at=concepto.created_at,
     )
 
 

@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, Field, model_validator
@@ -94,3 +95,4 @@ class ConceptoRead(BaseModel):
     duracion_meses: int | None
     dia_vencimiento: int | None
     activo: bool
+    created_at: datetime
