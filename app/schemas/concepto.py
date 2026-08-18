@@ -4,12 +4,15 @@ from decimal import Decimal
 from pydantic import BaseModel, Field, model_validator
 
 from app.models.concepto import PeriodoTasa, TipoConcepto
+from app.schemas.categoria import CategoriaRead
 
 
 class ConceptoCreate(BaseModel):
     nombre: str
     tipo: TipoConcepto
-    categoria: str | None = None
+    # Categories to assign at creation, by id - all must exist and belong to
+    # the caller. Omitted or empty means no categories, same as today.
+    categoria_ids: list[int] | None = None
     valor_total: Decimal | None = None
     # Optional planned amount for the current month; for deuda/gasto_fijo concepts
     # this seeds the current month's entry and auto-generates the rest of the year.
@@ -89,7 +92,10 @@ class ConceptoCreate(BaseModel):
 
 class ConceptoUpdate(BaseModel):
     nombre: str | None = None
-    categoria: str | None = None
+    # None means "don't touch category assignments" (consistent with every
+    # other field on this schema); an empty list explicitly clears them all -
+    # these are different requests, see FinanzappBackend design.md.
+    categoria_ids: list[int] | None = None
     activo: bool | None = None
     valor_total: Decimal | None = None
     dia_vencimiento: int | None = Field(default=None, ge=1, le=28)
@@ -102,7 +108,7 @@ class ConceptoRead(BaseModel):
     id: int
     nombre: str
     tipo: TipoConcepto
-    categoria: str | None
+    categorias: list[CategoriaRead]
     valor_total: Decimal | None
     saldo_restante: Decimal | None
     tasa_interes: Decimal | None

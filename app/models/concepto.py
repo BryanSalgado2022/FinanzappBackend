@@ -2,7 +2,9 @@ import enum
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
+
+from app.models.categoria import Categoria, ConceptoCategoria
 
 
 class TipoConcepto(str, enum.Enum):
@@ -23,7 +25,6 @@ class Concepto(SQLModel, table=True):
     user_id: int = Field(foreign_key="users.id", index=True)
     nombre: str
     tipo: TipoConcepto
-    categoria: str | None = Field(default=None)
     valor_total: Decimal | None = Field(default=None, max_digits=14, decimal_places=2)
     # Amortization terms (deuda only, optional, immutable once both tasa_interes
     # and numero_cuotas are set - see budget-concepts spec).
@@ -43,3 +44,5 @@ class Concepto(SQLModel, table=True):
     dia_vencimiento: int | None = Field(default=None)
     activo: bool = Field(default=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    categorias: list[Categoria] = Relationship(link_model=ConceptoCategoria)

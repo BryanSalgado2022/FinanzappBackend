@@ -88,10 +88,10 @@ Ese JWT se manda en cada request subsecuente como `Authorization: Bearer <token>
 | POST | `/auth/register` | Crear cuenta con nombre/email/password (min. 8 caracteres), devuelve JWT. 409 si el email ya existe. Rate-limited. |
 | POST | `/auth/login` | Login con email/password, devuelve JWT. 401 genérico si el email no existe o la password no coincide. Rate-limited. |
 | POST | `/auth/dev-login` | Login sin Google, solo si `DEV_MODE=true` (404 si no) |
-| POST | `/concepts` | Crear concepto (deuda / gasto_fijo / ingreso; deudas aceptan `tasa_interes`+`periodo_tasa`+`numero_cuotas` opcionales) |
+| POST | `/concepts` | Crear concepto (deuda / gasto_fijo / ingreso; deudas aceptan `tasa_interes`+`periodo_tasa`+`numero_cuotas` opcionales; `categoria_ids` opcional para asignar categorías existentes) |
 | GET | `/concepts` | Listar conceptos del usuario autenticado |
-| GET | `/concepts/{id}` | Ver un concepto (incluye saldo restante y, si tiene amortización, `cuota_fija`) |
-| PATCH | `/concepts/{id}` | Actualizar nombre/categoría/estado/valor_total/dia_vencimiento (valor_total no editable si la deuda tiene amortización; dia_vencimiento siempre editable) |
+| GET | `/concepts/{id}` | Ver un concepto (incluye saldo restante, `categorias` completas con emoji, y si tiene amortización, `cuota_fija`) |
+| PATCH | `/concepts/{id}` | Actualizar nombre/categorías/estado/valor_total/dia_vencimiento (valor_total no editable si la deuda tiene amortización; dia_vencimiento siempre editable; `categoria_ids` omitido = no tocar, `[]` = quitar todas) |
 | DELETE | `/concepts/{id}` | Eliminar concepto (elimina también sus entradas mensuales) |
 | GET | `/concepts/{id}/entries` | Listar entradas mensuales de un concepto |
 | PUT | `/concepts/{id}/entries/{anio}/{mes}` | Crear/actualizar el monto planeado/pagado de un mes |
@@ -99,6 +99,11 @@ Ese JWT se manda en cada request subsecuente como `Authorization: Bearer <token>
 | GET | `/summary?anio=&mes=` | Balance neto del mes (ingresos - deudas - gastos fijos) |
 | GET | `/summary/annual?anio=` | Ingresos/gastos planeados por cada uno de los 12 meses del año |
 | GET | `/debts/summary` | Total adeudado, total pagado, % de progreso global y composición entre todas las deudas del usuario |
+| POST | `/categorias` | Crear una categoría (nombre + emoji opcional). Idempotente por nombre (case-insensitive): si ya existe, devuelve la existente en vez de duplicar |
+| GET | `/categorias` | Listar categorías del usuario autenticado |
+| GET | `/categorias/{id}` | Ver una categoría |
+| PATCH | `/categorias/{id}` | Renombrar y/o cambiar el emoji de una categoría — se refleja automáticamente en todo concepto que la tenga asignada |
+| DELETE | `/categorias/{id}` | Eliminar una categoría. Se desasigna silenciosamente de los conceptos que la tenían, sin bloquear el borrado |
 
 Ver el contrato completo y ejemplos en `/docs` (Swagger) una vez la API está corriendo.
 
@@ -113,4 +118,5 @@ Ver el contrato completo y ejemplos en `/docs` (Swagger) una vez la API está co
 - Los conceptos recurrentes indefinidos (`gasto_fijo`/`ingreso` sin `duracion_meses`, deudas no amortizadas) se auto-extienden al año siguiente de forma perezosa: si al listar sus entradas no existe ninguna para el mes/año real de hoy, se generan automáticamente desde el mes actual hasta diciembre usando el monto de la entrada más reciente conocida — sin necesitar el gesto manual de editar enero. No hace nada si el concepto nunca tuvo ninguna entrada, ni si su entrada más reciente ya está en el futuro (evita rellenar con datos equivocados un concepto sembrado para un mes futuro).
 - `deuda`/`gasto_fijo` pueden llevar `dia_vencimiento` (1-28, opcional, no aplica a `ingreso`) — a diferencia de los campos anteriores, es **siempre editable** porque es puramente informativo y no dispara ningún recálculo. Cada entrada mensual expone `vencida` (calculado al vuelo: no pagada y con fecha de vencimiento ya pasada).
 - Login por email/password convive con Google: si alguien inicia sesión con Google usando un email que ya tiene cuenta por contraseña, el `google_sub` se **vincula automáticamente** a esa cuenta (el token de Google prueba que es dueño del correo). El registro por contraseña, en cambio, **siempre rechaza** un email ya usado (por Google o por otra contraseña) — nunca "reclama" una cuenta existente, porque no hay verificación de que el registrante sea el dueño real del correo. `/auth/register` y `/auth/login` tienen rate limiting en memoria (10 intentos / 5 min por IP); `/auth/google` no lo necesita porque ya depende de un token válido de Google. Sin verificación de email ni recuperación de contraseña por ahora (backlog futuro, diseñado para agregarse sin romper nada).
-- El backlog explícito está documentado en `openspec/changes/archive/2026-08-15-add-debt-amortization/proposal.md`: presupuesto por categorías tipo sobres (Necesidades/Deseos/Deudas/Futuro), función de importar datos, categorización de gastos por IA en lenguaje natural, multi-moneda.
+- Las categorías son una entidad real (`Categoria`), global por usuario (no separadas por tipo de concepto), asignables a un concepto en relación muchos-a-muchos (un concepto puede tener cero, una o varias). `POST /categorias` es **idempotente por nombre** (case-insensitive): pensado para que el frontend cree una categoría "al vuelo" sin verificar antes si ya existe. Renombrar o cambiarle el emoji a una categoría se refleja automáticamente en todo concepto que la use, porque el nombre/emoji viven en una sola fila, no duplicados. Eliminar una categoría la desasigna silenciosamente de sus conceptos (nunca bloquea el borrado ni deja un concepto en estado inválido). El emoji es opcional y debe ser uno de un set fijo curado de 16 (`ALLOWED_CATEGORIA_EMOJIS` en `app/models/categoria.py`) — cualquier otro valor se rechaza con 422. En `PATCH /concepts/{id}`, `categoria_ids` omitido significa "no tocar las categorías asignadas"; `categoria_ids: []` las vacía explícitamente — son solicitudes distintas.
+- El backlog explícito está documentado en `openspec/changes/archive/2026-08-15-add-debt-amortization/proposal.md`: presupuesto por categorías tipo sobres (Necesidades/Deseos/Deudas/Futuro), función de importar datos, categorización de gastos por IA en lenguaje natural, multi-moneda. Reportes/agrupación por categoría (`Categoria`) quedan también como backlog futuro explícito — este cambio solo deja el modelo de datos listo para eso.

@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from sqlmodel import Session, func, select
 
+from app.models.categoria import Categoria
 from app.models.concepto import Concepto, PeriodoTasa, TipoConcepto
 from app.models.entrada_mensual import EntradaMensual
 from app.services.amortization_service import (
@@ -15,12 +16,29 @@ class ConceptoNotFoundError(Exception):
     pass
 
 
+def _resolve_categorias(session: Session, user_id: int, categoria_ids: list[int]) -> list[Categoria]:
+    if not categoria_ids:
+        return []
+    categorias = list(
+        session.exec(
+            select(Categoria).where(
+                Categoria.user_id == user_id, Categoria.id.in_(categoria_ids)  # type: ignore[attr-defined]
+            )
+        )
+    )
+    found_ids = {c.id for c in categorias}
+    missing = [cid for cid in categoria_ids if cid not in found_ids]
+    if missing:
+        raise ValueError(f"category ids not found for this user: {missing}")
+    return categorias
+
+
 def create_concepto(
     session: Session,
     user_id: int,
     nombre: str,
     tipo: TipoConcepto,
-    categoria: str | None,
+    categoria_ids: list[int] | None,
     valor_total: Decimal | None,
     *,
     tasa_interes: Decimal | None = None,
@@ -34,7 +52,7 @@ def create_concepto(
         user_id=user_id,
         nombre=nombre,
         tipo=tipo,
-        categoria=categoria,
+        categorias=_resolve_categorias(session, user_id, categoria_ids or []),
         valor_total=valor_total,
         tasa_interes=tasa_interes,
         periodo_tasa=periodo_tasa,
@@ -70,7 +88,7 @@ def update_concepto(
     concepto_id: int,
     *,
     nombre: str | None = None,
-    categoria: str | None = None,
+    categoria_ids: list[int] | None = None,
     activo: bool | None = None,
     valor_total: Decimal | None = None,
     dia_vencimiento: int | None = None,
@@ -79,8 +97,10 @@ def update_concepto(
     concepto = get_concepto(session, user_id, concepto_id)
     if nombre is not None:
         concepto.nombre = nombre
-    if categoria is not None:
-        concepto.categoria = categoria
+    if categoria_ids is not None:
+        # None means "don't touch"; an empty list explicitly clears every
+        # assignment - see ConceptoUpdate's categoria_ids docstring.
+        concepto.categorias = _resolve_categorias(session, user_id, categoria_ids)
     if activo is not None:
         concepto.activo = activo
     if cuota_inicial is not None:

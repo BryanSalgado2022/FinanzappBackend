@@ -7,6 +7,7 @@ from app.database import get_session
 from app.dependencies import get_current_user
 from app.models.concepto import Concepto, TipoConcepto
 from app.models.user import User
+from app.schemas.categoria import CategoriaRead
 from app.schemas.concepto import ConceptoCreate, ConceptoRead, ConceptoUpdate
 from app.services import concept_service, entry_service
 from app.services.amortization_service import generar_tabla_amortizacion, tasa_mensual_desde
@@ -20,7 +21,9 @@ def _to_read(session: Session, concepto: Concepto) -> ConceptoRead:
         id=concepto.id,
         nombre=concepto.nombre,
         tipo=concepto.tipo,
-        categoria=concepto.categoria,
+        categorias=[
+            CategoriaRead(id=c.id, nombre=c.nombre, emoji=c.emoji) for c in concepto.categorias
+        ],
         valor_total=concepto.valor_total,
         saldo_restante=concept_service.saldo_restante(session, concepto),
         tasa_interes=concepto.tasa_interes,
@@ -41,20 +44,23 @@ def create_concept(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> ConceptoRead:
-    concepto = concept_service.create_concepto(
-        session,
-        current_user.id,
-        payload.nombre,
-        payload.tipo,
-        payload.categoria,
-        payload.valor_total,
-        tasa_interes=payload.tasa_interes,
-        periodo_tasa=payload.periodo_tasa,
-        numero_cuotas=payload.numero_cuotas,
-        cuota_inicial=payload.cuota_inicial,
-        duracion_meses=payload.duracion_meses,
-        dia_vencimiento=payload.dia_vencimiento,
-    )
+    try:
+        concepto = concept_service.create_concepto(
+            session,
+            current_user.id,
+            payload.nombre,
+            payload.tipo,
+            payload.categoria_ids,
+            payload.valor_total,
+            tasa_interes=payload.tasa_interes,
+            periodo_tasa=payload.periodo_tasa,
+            numero_cuotas=payload.numero_cuotas,
+            cuota_inicial=payload.cuota_inicial,
+            duracion_meses=payload.duracion_meses,
+            dia_vencimiento=payload.dia_vencimiento,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     today = date.today()
     anio = payload.anio or today.year
     mes = payload.mes or today.month
@@ -132,7 +138,7 @@ def update_concept(
             current_user.id,
             concepto_id,
             nombre=payload.nombre,
-            categoria=payload.categoria,
+            categoria_ids=payload.categoria_ids,
             activo=payload.activo,
             valor_total=payload.valor_total,
             dia_vencimiento=payload.dia_vencimiento,

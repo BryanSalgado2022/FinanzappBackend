@@ -209,3 +209,95 @@ def test_delete_concept_with_monthly_entries(client: TestClient, monkeypatch):
 
     delete = client.delete(f"/concepts/{concept_id}", headers=headers)
     assert delete.status_code == 204
+
+
+def test_create_concept_with_categoria_ids(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    categoria = client.post("/categorias", json={"nombre": "Vivienda"}, headers=headers).json()
+
+    response = client.post(
+        "/concepts",
+        json={"nombre": "Renta", "tipo": "gasto_fijo", "categoria_ids": [categoria["id"]]},
+        headers=headers,
+    )
+    assert response.status_code == 201, response.text
+    assert [c["nombre"] for c in response.json()["categorias"]] == ["Vivienda"]
+
+
+def test_create_concept_without_categoria_ids_has_no_categories(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    response = client.post(
+        "/concepts", json={"nombre": "Renta", "tipo": "gasto_fijo"}, headers=headers
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["categorias"] == []
+
+
+def test_create_concept_rejects_unknown_categoria_id(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    response = client.post(
+        "/concepts",
+        json={"nombre": "Renta", "tipo": "gasto_fijo", "categoria_ids": [999999]},
+        headers=headers,
+    )
+    assert response.status_code == 422
+
+
+def test_create_concept_rejects_categoria_id_from_another_user(client: TestClient, monkeypatch):
+    headers_a = auth_headers(client, monkeypatch, sub="google-a", email="a@example.com", name="A")
+    categoria = client.post("/categorias", json={"nombre": "Vivienda"}, headers=headers_a).json()
+
+    headers_b = auth_headers(client, monkeypatch, sub="google-b", email="b@example.com", name="B")
+    response = client.post(
+        "/concepts",
+        json={"nombre": "Renta", "tipo": "gasto_fijo", "categoria_ids": [categoria["id"]]},
+        headers=headers_b,
+    )
+    assert response.status_code == 422
+
+
+def test_update_concept_replaces_categoria_ids(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    cat_a = client.post("/categorias", json={"nombre": "Vivienda"}, headers=headers).json()
+    cat_b = client.post("/categorias", json={"nombre": "Creditos"}, headers=headers).json()
+    concept = client.post(
+        "/concepts",
+        json={"nombre": "Renta", "tipo": "gasto_fijo", "categoria_ids": [cat_a["id"]]},
+        headers=headers,
+    ).json()
+
+    response = client.patch(
+        f"/concepts/{concept['id']}", json={"categoria_ids": [cat_b["id"]]}, headers=headers
+    )
+    assert response.status_code == 200, response.text
+    assert [c["nombre"] for c in response.json()["categorias"]] == ["Creditos"]
+
+
+def test_update_concept_omitted_categoria_ids_leaves_assignments_unchanged(
+    client: TestClient, monkeypatch
+):
+    headers = _headers(client, monkeypatch)
+    categoria = client.post("/categorias", json={"nombre": "Vivienda"}, headers=headers).json()
+    concept = client.post(
+        "/concepts",
+        json={"nombre": "Renta", "tipo": "gasto_fijo", "categoria_ids": [categoria["id"]]},
+        headers=headers,
+    ).json()
+
+    response = client.patch(f"/concepts/{concept['id']}", json={"nombre": "Renta 2"}, headers=headers)
+    assert response.status_code == 200, response.text
+    assert [c["nombre"] for c in response.json()["categorias"]] == ["Vivienda"]
+
+
+def test_update_concept_empty_categoria_ids_clears_assignments(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    categoria = client.post("/categorias", json={"nombre": "Vivienda"}, headers=headers).json()
+    concept = client.post(
+        "/concepts",
+        json={"nombre": "Renta", "tipo": "gasto_fijo", "categoria_ids": [categoria["id"]]},
+        headers=headers,
+    ).json()
+
+    response = client.patch(f"/concepts/{concept['id']}", json={"categoria_ids": []}, headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["categorias"] == []
