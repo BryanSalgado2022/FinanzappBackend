@@ -5,6 +5,7 @@ from sqlmodel import Session, func, select
 from app.models.concepto import Concepto, TipoConcepto
 from app.models.entrada_mensual import EntradaMensual
 from app.schemas.summary import MonthlySummary
+from app.services.gasto_service import sum_gastos
 
 
 def _sum_planeado(session: Session, user_id: int, anio: int, mes: int, tipos: tuple[TipoConcepto, ...]) -> Decimal:
@@ -25,7 +26,7 @@ def monthly_summary(session: Session, user_id: int, anio: int, mes: int) -> Mont
     total_ingresos = _sum_planeado(session, user_id, anio, mes, (TipoConcepto.INGRESO,))
     total_gastos = _sum_planeado(
         session, user_id, anio, mes, (TipoConcepto.DEUDA, TipoConcepto.GASTO_FIJO)
-    )
+    ) + sum_gastos(session, user_id, anio, mes)
     return MonthlySummary(
         anio=anio,
         mes=mes,

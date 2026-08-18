@@ -96,7 +96,7 @@ Ese JWT se manda en cada request subsecuente como `Authorization: Bearer <token>
 | GET | `/concepts/{id}/entries` | Listar entradas mensuales de un concepto |
 | PUT | `/concepts/{id}/entries/{anio}/{mes}` | Crear/actualizar el monto planeado/pagado de un mes |
 | DELETE | `/concepts/{id}/entries/{anio}/{mes}` | Eliminar una entrada mensual individual. Solo en conceptos recurrentes indefinidos (409 si el concepto tiene amortización o `duracion_meses`). 404 si la entrada no existe. |
-| GET | `/summary?anio=&mes=` | Balance neto del mes (ingresos - deudas - gastos fijos) |
+| GET | `/summary?anio=&mes=` | Balance neto del mes (ingresos - deudas - gastos fijos - gastos variables) |
 | GET | `/summary/annual?anio=` | Ingresos/gastos planeados por cada uno de los 12 meses del año |
 | GET | `/debts/summary` | Total adeudado, total pagado, % de progreso global y composición entre todas las deudas del usuario |
 | POST | `/categorias` | Crear una categoría (nombre + emoji opcional). Idempotente por nombre (case-insensitive): si ya existe, devuelve la existente en vez de duplicar |
@@ -117,6 +117,11 @@ Ese JWT se manda en cada request subsecuente como `Authorization: Bearer <token>
 | POST | `/deudores/{id}/abonos` | Registrar un abono (pago parcial) para un deudor |
 | GET | `/deudores/{id}/abonos` | Listar abonos de un deudor |
 | DELETE | `/deudores/{id}/abonos/{abono_id}` | Eliminar un abono |
+| POST | `/gastos` | Registrar un gasto variable/puntual (monto, fecha y descripción requeridos; categorías opcionales) |
+| GET | `/gastos?anio=&mes=` | Listar gastos del usuario autenticado, opcionalmente filtrados por año/mes de `fecha` |
+| GET | `/gastos/{id}` | Ver un gasto |
+| PATCH | `/gastos/{id}` | Actualizar cualquier campo de un gasto, sin restricción por fecha |
+| DELETE | `/gastos/{id}` | Eliminar un gasto |
 
 Ver el contrato completo y ejemplos en `/docs` (Swagger) una vez la API está corriendo.
 
@@ -135,3 +140,4 @@ Ver el contrato completo y ejemplos en `/docs` (Swagger) una vez la API está co
 - El backlog explícito está documentado en `openspec/changes/archive/2026-08-15-add-debt-amortization/proposal.md`: presupuesto por categorías tipo sobres (Necesidades/Deseos/Deudas/Futuro), función de importar datos, categorización de gastos por IA en lenguaje natural, multi-moneda. Reportes/agrupación por categoría (`Categoria`) quedan también como backlog futuro explícito — este cambio solo deja el modelo de datos listo para eso.
 - `Tarea` es una entidad completamente independiente (sin FK hacia/desde `Concepto`, `Categoria`, ni ninguna otra tabla) — recordatorios/citas genéricos, no financieros. Usa su propio set fijo de emojis (`ALLOWED_TAREA_EMOJIS` en `app/models/tarea.py`, orientado a recordatorios: reloj, campana, teléfono, etc.), distinto al de categorías (`ALLOWED_CATEGORIA_EMOJIS`, orientado a finanzas). `vencida` se calcula al vuelo igual que `EntradaMensual.vencida` (fecha pasada + no completada), nunca se almacena. Deliberadamente **no** tiene ningún campo ni lógica de recurrencia/frecuencia — se pospuso hasta que exista una vista de calendario ("Agenda") donde tenga sentido mostrar instancias repetidas; no reintroducir sin revisar esa decisión primero.
 - `Deudor` (dinero que otras personas le deben al usuario, inverso de `Concepto` tipo `deuda`) es también una entidad completamente independiente, sin relación con `Concepto`/`Categoria`/`Tarea`. Trackea pagos parciales vía `Abono` (FK `ondelete="CASCADE"`, sin `user_id` propio — la propiedad se valida siempre a través del `Deudor` padre, igual que `EntradaMensual` se valida a través de su `Concepto`). `saldo_restante` se calcula al vuelo igual que en `Concepto` (`monto_total` menos la suma de abonos), nunca se almacena. `garantia` es texto libre opcional (vacío = sin garantía, sin campo booleano separado). `activo` es un campo explícito para marcar un deudor como "terminado" sin borrar su historial de abonos. Las 3 tarjetas resumen de la pantalla de Deudores se calculan 100% en el frontend a partir de la lista, sin endpoint de resumen dedicado.
+- `Gasto` (gasto variable/puntual, ej. "pizza $20.000") es una entidad standalone, distinta de `Concepto`: a diferencia del flujo mensual planeado (`EntradaMensual`), un gasto es un registro libre con su propio `monto`+`fecha`+`descripcion`, sin relación con ningún mes "planeado" de antemano. Puede llevar cero o varias `Categoria` asignadas vía una tabla de enlace propia (`GastoCategoria`, mismo patrón que `ConceptoCategoria` pero sin acoplar `Gasto` y `Concepto` entre sí) — reutiliza la misma entidad `Categoria` que ya usan los conceptos, sin un set de emojis propio. A diferencia de `Tarea`/`Deudor` (deliberadamente aislados del balance), `Gasto` sí impacta `GET /summary`: `monthly_summary` resta la suma de `Gasto.monto` cuyo `fecha` cae en el año/mes consultado (vía `EXTRACT(year/month FROM fecha)`, ya que a diferencia de `EntradaMensual` no tiene columnas `anio`/`mes` separadas) del `total_gastos`, usando siempre la fecha real del gasto y no la fecha en que se registró. Edición y eliminación son libres, sin ninguna restricción por fecha.

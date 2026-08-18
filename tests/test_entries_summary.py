@@ -121,3 +121,33 @@ def test_summary_with_no_entries_returns_zero(client: TestClient, monkeypatch):
     headers = _headers(client, monkeypatch)
     response = client.get("/summary", params={"anio": 1999, "mes": 1}, headers=headers)
     assert as_decimal(response.json()["balance_neto"]) == Decimal("0")
+
+
+def test_summary_subtracts_variable_expenses_in_the_requested_month(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    sueldo = client.post("/concepts", json={"nombre": "Sueldo", "tipo": "ingreso"}, headers=headers).json()
+    client.put(
+        f"/concepts/{sueldo['id']}/entries/2031/3",
+        json={"monto_planeado": "1000000.00"},
+        headers=headers,
+    )
+    client.post(
+        "/gastos", json={"monto": "20000", "fecha": "2031-03-05", "descripcion": "Pizza"}, headers=headers
+    )
+
+    summary = client.get("/summary", params={"anio": 2031, "mes": 3}, headers=headers).json()
+    assert as_decimal(summary["total_gastos"]) == Decimal("20000.00")
+    assert as_decimal(summary["balance_neto"]) == Decimal("980000.00")
+
+
+def test_summary_ignores_variable_expenses_outside_the_requested_month(
+    client: TestClient, monkeypatch
+):
+    headers = _headers(client, monkeypatch)
+    client.post(
+        "/gastos", json={"monto": "20000", "fecha": "2031-04-05", "descripcion": "Pizza"}, headers=headers
+    )
+
+    summary = client.get("/summary", params={"anio": 2031, "mes": 3}, headers=headers).json()
+    assert as_decimal(summary["total_gastos"]) == Decimal("0")
+    assert as_decimal(summary["balance_neto"]) == Decimal("0")
