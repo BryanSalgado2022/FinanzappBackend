@@ -1,6 +1,7 @@
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
 
 
 class Settings(BaseSettings):
@@ -17,6 +18,19 @@ class Settings(BaseSettings):
     jwt_expires_minutes: int = 60 * 24 * 7
     cors_origins: str = "http://localhost:5173"
     dev_mode: bool = False
+
+    @field_validator("database_url")
+    @classmethod
+    def _normalize_database_url(cls, value: str) -> str:
+        # Railway's auto-injected DATABASE_URL (and Heroku-style URLs
+        # generally) omit the driver - SQLAlchemy then defaults to psycopg2,
+        # which isn't installed here (this project uses psycopg v3). Force
+        # the psycopg v3 dialect unless a driver is already specified.
+        if value.startswith("postgres://"):
+            return "postgresql+psycopg://" + value[len("postgres://") :]
+        if value.startswith("postgresql://"):
+            return "postgresql+psycopg://" + value[len("postgresql://") :]
+        return value
 
     @property
     def cors_origins_list(self) -> list[str]:
