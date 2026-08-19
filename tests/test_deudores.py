@@ -182,3 +182,24 @@ def test_saldo_restante_fully_paid(client: TestClient, monkeypatch):
 
     response = client.get(f"/deudores/{deudor_id}", headers=headers)
     assert response.json()["saldo_restante"] == "0.00"
+
+
+def test_finalizado_en_set_on_close_and_cleared_on_reactivate(client: TestClient, monkeypatch):
+    import datetime
+
+    headers = _headers(client, monkeypatch)
+    created = client.post(
+        "/deudores",
+        json={"nombre": "Juan", "monto_total": "500000", "fecha": "2026-01-01"},
+        headers=headers,
+    )
+    deudor_id = created.json()["id"]
+    assert created.json()["finalizado_en"] is None
+
+    closed = client.patch(f"/deudores/{deudor_id}", json={"activo": False}, headers=headers)
+    assert closed.status_code == 200, closed.text
+    assert closed.json()["finalizado_en"] == datetime.date.today().isoformat()
+
+    reactivated = client.patch(f"/deudores/{deudor_id}", json={"activo": True}, headers=headers)
+    assert reactivated.status_code == 200, reactivated.text
+    assert reactivated.json()["finalizado_en"] is None

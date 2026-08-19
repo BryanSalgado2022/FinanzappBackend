@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 
 from sqlmodel import Session, func, select
@@ -101,7 +102,11 @@ def update_concepto(
         # None means "don't touch"; an empty list explicitly clears every
         # assignment - see ConceptoUpdate's categoria_ids docstring.
         concepto.categorias = _resolve_categorias(session, user_id, categoria_ids)
-    if activo is not None:
+    if activo is not None and activo != concepto.activo:
+        # Only on an actual transition, not every save where activo happens
+        # to be re-sent with its current value - otherwise finalizado_en
+        # would get bumped to today on every unrelated edit.
+        concepto.finalizado_en = None if activo else date.today()
         concepto.activo = activo
     if cuota_inicial is not None:
         raise ValueError(
@@ -118,8 +123,6 @@ def update_concepto(
             )
         concepto.valor_total = valor_total
     if dia_vencimiento is not None:
-        if concepto.tipo == TipoConcepto.INGRESO:
-            raise ValueError("dia_vencimiento is not allowed for concepts of type 'ingreso'")
         # No es_amortizada guard here, unlike valor_total above - dia_vencimiento
         # is informational only and never feeds a recalculation, so it stays
         # editable even on a locked amortized debt.

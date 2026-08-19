@@ -112,6 +112,13 @@ def _save_entry(
     # planned" - saldo_restante and the debts summary sum monto_pagado, not
     # the pagado flag, so leaving it null here would silently not count it.
     entry.monto_pagado = monto_pagado if monto_pagado is not None else (monto_planeado if pagado else None)
+    # Only on an actual pagado transition, not every save of an already-paid
+    # entry (e.g. correcting monto_pagado) - otherwise fecha_pago would get
+    # bumped to today on every unrelated edit.
+    if pagado and not entry.pagado:
+        entry.fecha_pago = date.today()
+    elif not pagado:
+        entry.fecha_pago = None
     entry.pagado = pagado
     session.add(entry)
     session.commit()

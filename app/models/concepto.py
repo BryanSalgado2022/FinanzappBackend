@@ -1,5 +1,5 @@
 import enum
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from sqlmodel import Field, Relationship, SQLModel
@@ -38,11 +38,16 @@ class Concepto(SQLModel, table=True):
     # Fixed duration for gasto_fijo/ingreso recurrence (optional, immutable).
     # Not valid on deuda - see budget-concepts spec.
     duracion_meses: int | None = Field(default=None)
-    # Day of month (1-28) a deuda/gasto_fijo installment is due (optional).
-    # Purely informational/display - never feeds a calculation, so unlike the
-    # fields above it stays mutable at any time - see budget-concepts spec.
+    # Day of month (1-28) an installment/payment is due, for any concept type
+    # (optional). Purely informational/display - never feeds a calculation,
+    # so unlike the fields above it stays mutable at any time - see
+    # budget-concepts spec.
     dia_vencimiento: int | None = Field(default=None)
     activo: bool = Field(default=True)
+    # Set automatically to today's date when `activo` transitions to False,
+    # cleared if reactivated - lets the Agenda calendar mark the exact day a
+    # concept was closed out. Never client-supplied - see design.md.
+    finalizado_en: date | None = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     categorias: list[Categoria] = Relationship(link_model=ConceptoCategoria)

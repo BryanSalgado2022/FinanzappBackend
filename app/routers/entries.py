@@ -23,6 +23,7 @@ def _to_entry_read(concepto: Concepto, entry: EntradaMensual) -> EntradaMensualR
         monto_planeado=entry.monto_planeado,
         monto_pagado=entry.monto_pagado,
         pagado=entry.pagado,
+        fecha_pago=entry.fecha_pago,
         vencida=entry_service.es_vencida(concepto.dia_vencimiento, entry.anio, entry.mes, entry.pagado),
     )
 

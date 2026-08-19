@@ -20,6 +20,7 @@ def _to_read(session: Session, deudor: Deudor) -> DeudorRead:
         fecha=deudor.fecha,
         garantia=deudor.garantia,
         activo=deudor.activo,
+        finalizado_en=deudor.finalizado_en,
         saldo_restante=deudor_service.saldo_restante(session, deudor),
     )
 

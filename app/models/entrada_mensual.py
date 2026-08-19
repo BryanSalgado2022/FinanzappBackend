@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from sqlmodel import Field, SQLModel, UniqueConstraint
@@ -17,4 +17,9 @@ class EntradaMensual(SQLModel, table=True):
     monto_planeado: Decimal = Field(max_digits=14, decimal_places=2)
     monto_pagado: Decimal | None = Field(default=None, max_digits=14, decimal_places=2)
     pagado: bool = Field(default=False)
+    # Set automatically to today's date the moment this entry transitions to
+    # pagado, cleared if marked unpaid again - lets the Agenda calendar place
+    # "this was paid" on an exact day (anio/mes alone isn't precise enough).
+    # Never client-supplied - see design.md.
+    fecha_pago: date | None = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

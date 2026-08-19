@@ -26,6 +26,7 @@ class DeudorRead(BaseModel):
     fecha: date
     garantia: str | None
     activo: bool
+    finalizado_en: date | None
     saldo_restante: Decimal
 
 

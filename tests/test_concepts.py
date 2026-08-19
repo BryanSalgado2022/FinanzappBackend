@@ -139,14 +139,22 @@ def test_reject_dia_vencimiento_out_of_range(client: TestClient, monkeypatch):
         assert response.status_code == 422
 
 
-def test_reject_dia_vencimiento_on_ingreso(client: TestClient, monkeypatch):
+def test_dia_vencimiento_accepted_on_ingreso(client: TestClient, monkeypatch):
     headers = _headers(client, monkeypatch)
     response = client.post(
         "/concepts",
         json={"nombre": "Sueldo", "tipo": "ingreso", "dia_vencimiento": 15},
         headers=headers,
     )
-    assert response.status_code == 422
+    assert response.status_code == 201, response.text
+    assert response.json()["dia_vencimiento"] == 15
+
+    concept_id = response.json()["id"]
+    update = client.patch(
+        f"/concepts/{concept_id}", json={"dia_vencimiento": 20}, headers=headers
+    )
+    assert update.status_code == 200, update.text
+    assert update.json()["dia_vencimiento"] == 20
 
 
 def test_dia_vencimiento_editable_even_on_amortized_debt(client: TestClient, monkeypatch):
@@ -301,3 +309,32 @@ def test_update_concept_empty_categoria_ids_clears_assignments(client: TestClien
     response = client.patch(f"/concepts/{concept['id']}", json={"categoria_ids": []}, headers=headers)
     assert response.status_code == 200, response.text
     assert response.json()["categorias"] == []
+
+
+def test_finalizado_en_set_on_finish_and_cleared_on_reactivate(client: TestClient, monkeypatch):
+    import datetime
+
+    headers = _headers(client, monkeypatch)
+    concept = client.post(
+        "/concepts", json={"nombre": "Renta", "tipo": "gasto_fijo"}, headers=headers
+    ).json()
+    assert concept["finalizado_en"] is None
+
+    finished = client.patch(f"/concepts/{concept['id']}", json={"activo": False}, headers=headers)
+    assert finished.status_code == 200, finished.text
+    assert finished.json()["finalizado_en"] == datetime.date.today().isoformat()
+
+    reactivated = client.patch(f"/concepts/{concept['id']}", json={"activo": True}, headers=headers)
+    assert reactivated.status_code == 200, reactivated.text
+    assert reactivated.json()["finalizado_en"] is None
+
+
+def test_finalizado_en_unchanged_when_activo_resent_unchanged(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    concept = client.post(
+        "/concepts", json={"nombre": "Renta", "tipo": "gasto_fijo"}, headers=headers
+    ).json()
+
+    response = client.patch(f"/concepts/{concept['id']}", json={"activo": True}, headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["finalizado_en"] is None

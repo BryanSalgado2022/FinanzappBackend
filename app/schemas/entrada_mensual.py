@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 
 from pydantic import BaseModel
@@ -17,4 +18,5 @@ class EntradaMensualRead(BaseModel):
     monto_planeado: Decimal
     monto_pagado: Decimal | None
     pagado: bool
+    fecha_pago: date | None
     vencida: bool

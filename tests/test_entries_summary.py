@@ -151,3 +151,45 @@ def test_summary_ignores_variable_expenses_outside_the_requested_month(
     summary = client.get("/summary", params={"anio": 2031, "mes": 3}, headers=headers).json()
     assert as_decimal(summary["total_gastos"]) == Decimal("0")
     assert as_decimal(summary["balance_neto"]) == Decimal("0")
+
+
+def test_fecha_pago_set_on_pagado_transition_and_cleared_on_unpaid(
+    client: TestClient, monkeypatch
+):
+    headers = _headers(client, monkeypatch)
+    concept = client.post(
+        "/concepts", json={"nombre": "Netflix", "tipo": "gasto_fijo"}, headers=headers
+    ).json()
+    concept_id = concept["id"]
+    today = datetime.date.today().isoformat()
+
+    unpaid = client.put(
+        f"/concepts/{concept_id}/entries/2032/1",
+        json={"monto_planeado": "50000.00"},
+        headers=headers,
+    )
+    assert unpaid.json()["fecha_pago"] is None
+
+    paid = client.put(
+        f"/concepts/{concept_id}/entries/2032/1",
+        json={"monto_planeado": "50000.00", "pagado": True},
+        headers=headers,
+    )
+    assert paid.status_code == 200, paid.text
+    assert paid.json()["fecha_pago"] == today
+
+    # Re-saving an already-paid entry (correcting monto_pagado) must not
+    # bump fecha_pago again.
+    edited = client.put(
+        f"/concepts/{concept_id}/entries/2032/1",
+        json={"monto_planeado": "50000.00", "monto_pagado": "45000.00", "pagado": True},
+        headers=headers,
+    )
+    assert edited.json()["fecha_pago"] == today
+
+    unpaid_again = client.put(
+        f"/concepts/{concept_id}/entries/2032/1",
+        json={"monto_planeado": "50000.00", "pagado": False},
+        headers=headers,
+    )
+    assert unpaid_again.json()["fecha_pago"] is None

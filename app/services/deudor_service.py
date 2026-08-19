@@ -67,7 +67,10 @@ def update_deudor(
         deudor.fecha = fecha
     if garantia is not None:
         deudor.garantia = garantia
-    if activo is not None:
+    if activo is not None and activo != deudor.activo:
+        # Only on an actual transition - see concept_service.update_concepto
+        # for why re-sending the same value must not bump finalizado_en.
+        deudor.finalizado_en = None if activo else date.today()
         deudor.activo = activo
     session.add(deudor)
     session.commit()

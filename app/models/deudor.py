@@ -14,6 +14,10 @@ class Deudor(SQLModel, table=True):
     fecha: date
     garantia: str | None = Field(default=None)
     activo: bool = Field(default=True)
+    # Set automatically to today's date when `activo` transitions to False,
+    # cleared if reactivated - lets the Agenda calendar mark the exact day a
+    # debtor was closed out. Never client-supplied - see design.md.
+    finalizado_en: date | None = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
