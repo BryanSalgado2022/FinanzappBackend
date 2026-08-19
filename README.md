@@ -54,6 +54,28 @@ alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
+## Despliegue
+
+Pensado para Railway (contenedor Docker + Postgres administrado). El `Dockerfile` ya está listo: al arrancar corre `alembic upgrade head` automáticamente antes de levantar uvicorn, y escucha en el puerto que Railway inyecte por `$PORT` (con fallback a 8000 para uso local). Railway detecta el `Dockerfile` y construye directo desde él — no hace falta ningún archivo de configuración extra.
+
+Pasos (los haces tú desde el dashboard de Railway, no algo que se automatice desde este repo):
+
+1. Conecta este repositorio de GitHub a un nuevo proyecto de Railway.
+2. Agrega un plugin de Postgres al proyecto y deja que Railway inyecte `DATABASE_URL` automáticamente (no lo escribas a mano).
+3. Configura estas variables de entorno en el servicio:
+
+   | Variable | Valor en Railway |
+   |---|---|
+   | `DATABASE_URL` | Provisto automáticamente por el plugin de Postgres de Railway |
+   | `GOOGLE_CLIENT_ID` | El mismo valor que tu `.env` local (mismo proyecto de Google OAuth), salvo que crees uno de producción aparte |
+   | `JWT_SECRET` | Un valor nuevo y fuerte — **no reutilices** el secreto de desarrollo local |
+   | `CORS_ORIGINS` | La URL de producción del frontend en Vercel — agrégala una vez que exista (ver el paso de secuencia abajo) |
+   | `DEV_MODE` | Déjalo sin definir, o en `false` explícitamente — **nunca** `true` en un entorno desplegado (habilita login sin contraseña vía `/auth/dev-login`) |
+
+4. **Secuencia con el frontend**: la URL de Railway y la de Vercel se necesitan mutuamente (`CORS_ORIGINS` acá, `VITE_API_BASE_URL` allá). Despliega primero este backend, copia su URL, despliega el frontend con esa URL, y luego vuelve aquí a agregar la URL de Vercel a `CORS_ORIGINS`.
+
+Un workflow de CI (`.github/workflows/backend-tests.yml`) corre la suite de pytest en cada push a `main` y en cada PR — no despliega nada, solo evita que código roto llegue a `main`. El despliegue en sí lo dispara la propia integración de Railway con GitHub, una vez conectada.
+
 ## Tests
 
 ```bash
