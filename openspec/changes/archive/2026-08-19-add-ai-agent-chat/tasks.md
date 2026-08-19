@@ -41,7 +41,7 @@
 
 ## 7. Manual verification
 
-- [ ] 7.1 Start the server locally with a real `GEMINI_API_KEY`, send the two example messages from the original request ("Hoy gasté 50.000 en gasolina para el carro", "Debo 250.000.000 por crédito hipotecario a 10 años a una tasa de interés del 1.47%") via curl/httpie, confirm both produce sensible `proposed_action` responses
-- [ ] 7.2 Send a deliberately incomplete message (e.g. "Le aboné a Juan"), confirm a clarifying question about the missing amount
-- [ ] 7.3 Send an abono message where the named debtor doesn't exist yet, confirm clarification_needed rather than a fabricated id
-- [ ] 7.4 Send an unrelated message, confirm a plain reply with no proposed action
+- [x] 7.1 Start the server locally with a real `GEMINI_API_KEY`, send the two example messages from the original request ("Hoy gasté 50.000 en gasolina para el carro", "Debo 250.000.000 por crédito hipotecario a 10 años a una tasa de interés del 1.47%") via curl/httpie, confirm both produce sensible `proposed_action` responses
+- [x] 7.2 Send a deliberately incomplete message (e.g. "Le aboné a Juan"), confirm a clarifying question about the missing amount
+- [x] 7.3 Send an abono message where the named debtor doesn't exist yet, confirm clarification_needed rather than a fabricated id
+- [x] 7.4 Send an unrelated message, confirm a plain reply with no proposed action
