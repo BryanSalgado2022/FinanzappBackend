@@ -8,6 +8,10 @@ class Settings(BaseSettings):
 
     database_url: str
     google_client_id: str
+    # Optional (unlike google_client_id/jwt_secret): the AI chat agent is a
+    # standalone feature, not core auth - the rest of the app must keep
+    # working when this isn't configured yet.
+    gemini_api_key: str | None = None
     jwt_secret: str
     jwt_algorithm: str = "HS256"
     jwt_expires_minutes: int = 60 * 24 * 7

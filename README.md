@@ -71,6 +71,7 @@ Pasos (los haces tú desde el dashboard de Railway, no algo que se automatice de
    | `JWT_SECRET` | Un valor nuevo y fuerte — **no reutilices** el secreto de desarrollo local |
    | `CORS_ORIGINS` | La URL de producción del frontend en Vercel — agrégala una vez que exista (ver el paso de secuencia abajo) |
    | `DEV_MODE` | Déjalo sin definir, o en `false` explícitamente — **nunca** `true` en un entorno desplegado (habilita login sin contraseña vía `/auth/dev-login`) |
+   | `GEMINI_API_KEY` | Tu clave de la API de Gemini (Google AI Studio), para el agente de chat (`POST /agent/chat`). Opcional — el resto de la app funciona sin ella, pero ese endpoint devuelve 502 hasta que esté configurada |
 
 4. **Secuencia con el frontend**: la URL de Railway y la de Vercel se necesitan mutuamente (`CORS_ORIGINS` acá, `VITE_API_BASE_URL` allá). Despliega primero este backend, copia su URL, despliega el frontend con esa URL, y luego vuelve aquí a agregar la URL de Vercel a `CORS_ORIGINS`.
 
@@ -146,6 +147,7 @@ Ese JWT se manda en cada request subsecuente como `Authorization: Bearer <token>
 | DELETE | `/gastos/{id}` | Eliminar un gasto |
 | GET | `/users/me` | Ver el perfil del usuario autenticado, incluyendo `color_acento` |
 | PATCH | `/users/me` | Actualizar `color_acento` (uno de un set curado de 9, o `null` para volver al color por defecto) |
+| POST | `/agent/chat` | Interpreta un mensaje en lenguaje natural (con el historial completo de la conversación) y devuelve una acción propuesta, una pregunta de aclaración, o una respuesta conversacional — **nunca escribe nada en la base de datos**. Requiere `GEMINI_API_KEY` configurada (502 si no). Rate-limited por usuario. |
 
 Ver el contrato completo y ejemplos en `/docs` (Swagger) una vez la API está corriendo.
 

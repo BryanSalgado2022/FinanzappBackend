@@ -2,7 +2,19 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routers import auth, categorias, concepts, debts, deudores, entries, gastos, summary, tareas, users
+from app.routers import (
+    agent,
+    auth,
+    categorias,
+    concepts,
+    debts,
+    deudores,
+    entries,
+    gastos,
+    summary,
+    tareas,
+    users,
+)
 
 app = FastAPI(title="Finanzapp API")
 
@@ -14,6 +26,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(agent.router)
 app.include_router(auth.router)
 app.include_router(categorias.router)
 app.include_router(concepts.router)

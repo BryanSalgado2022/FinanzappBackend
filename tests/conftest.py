@@ -4,6 +4,7 @@ from decimal import Decimal
 
 os.environ.setdefault("DATABASE_URL", "sqlite://")
 os.environ.setdefault("GOOGLE_CLIENT_ID", "test-client-id")
+os.environ.setdefault("GEMINI_API_KEY", "test-gemini-key")
 os.environ.setdefault("JWT_SECRET", "test-secret")
 # Without this, Settings falls back to reading the real .env file's DEV_MODE
 # value (pydantic-settings env_file fallback), coupling test behavior to

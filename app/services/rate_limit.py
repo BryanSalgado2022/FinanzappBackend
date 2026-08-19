@@ -10,8 +10,14 @@ from fastapi import HTTPException, Request, status
 _attempts: dict[str, list[float]] = defaultdict(list)
 
 
-def check_rate_limit(request: Request, key: str, limit: int, window_seconds: int) -> None:
-    client_ip = request.client.host if request.client else "unknown"
+def check_rate_limit(
+    request: Request, key: str, limit: int, window_seconds: int, *, identifier: str | None = None
+) -> None:
+    # identifier overrides the IP-derived bucket - used for already-authenticated
+    # endpoints (e.g. the AI chat agent), where limiting by user id is more
+    # correct than by IP (multiple users can share an IP; one user's requests
+    # shouldn't be throttled by another's on the same network).
+    client_ip = identifier or (request.client.host if request.client else "unknown")
     bucket_key = f"{key}:{client_ip}"
     now = time.monotonic()
     window_start = now - window_seconds
