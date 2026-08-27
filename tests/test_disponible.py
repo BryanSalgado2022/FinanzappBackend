@@ -142,6 +142,18 @@ def test_disponible_ignores_abono_interes_before_baseline(client: TestClient, mo
     assert as_decimal(response.json()["disponible"]) == Decimal("0")
 
 
+def test_disponible_unset_after_clearing_baseline(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    client.patch("/users/me", json={"saldo_disponible_inicial": "1000000"}, headers=headers)
+    assert client.get("/summary/disponible", headers=headers).json()["disponible"] is not None
+
+    client.patch("/users/me", json={"saldo_disponible_inicial": None}, headers=headers)
+
+    response = client.get("/summary/disponible", headers=headers)
+    assert response.json()["disponible"] is None
+    assert response.json()["saldo_disponible_fecha"] is None
+
+
 def test_disponible_scoped_to_authenticated_user(client: TestClient, monkeypatch):
     headers_a = auth_headers(client, monkeypatch, sub="google-a", email="a@example.com", name="A")
     client.patch("/users/me", json={"saldo_disponible_inicial": "1000000"}, headers=headers_a)

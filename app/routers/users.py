@@ -47,10 +47,15 @@ def update_me(
         changed = True
     if "saldo_disponible_inicial" in payload.model_fields_set:
         current_user.saldo_disponible_inicial = payload.saldo_disponible_inicial
-        # Always re-dated to today server-side, never client-supplied - see
-        # openspec add-available-balance. Avoids double-counting money
-        # already folded into the new manually-entered baseline.
-        current_user.saldo_disponible_fecha = date.today()
+        # Setting a real value always re-dates the baseline to today
+        # server-side, never client-supplied - see openspec
+        # add-available-balance. Avoids double-counting money already
+        # folded into the new manually-entered baseline. Clearing back to
+        # null must also clear the date - otherwise Disponible could never
+        # return to "not configured" (see openspec
+        # fix-clear-disponible-baseline), it would just keep computing from
+        # a zero baseline as of today.
+        current_user.saldo_disponible_fecha = date.today() if payload.saldo_disponible_inicial is not None else None
         changed = True
     if changed:
         session.add(current_user)

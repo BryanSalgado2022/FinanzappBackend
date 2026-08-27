@@ -99,6 +99,24 @@ def test_patch_saldo_disponible_inicial_again_replaces_value_and_date(
     assert response.json()["saldo_disponible_fecha"] == datetime.date.today().isoformat()
 
 
+def test_patch_clears_saldo_disponible_inicial_and_fecha_together(
+    client: TestClient, monkeypatch
+):
+    headers = _headers(client, monkeypatch)
+    client.patch("/users/me", json={"saldo_disponible_inicial": "2000000"}, headers=headers)
+
+    response = client.patch(
+        "/users/me", json={"saldo_disponible_inicial": None}, headers=headers
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["saldo_disponible_inicial"] is None
+    assert response.json()["saldo_disponible_fecha"] is None
+
+    get = client.get("/users/me", headers=headers)
+    assert get.json()["saldo_disponible_inicial"] is None
+    assert get.json()["saldo_disponible_fecha"] is None
+
+
 def test_users_me_scoped_to_authenticated_user(client: TestClient, monkeypatch):
     headers_a = auth_headers(client, monkeypatch, sub="google-a", email="a@example.com", name="A")
     client.patch("/users/me", json={"color_acento": "rojo"}, headers=headers_a)
