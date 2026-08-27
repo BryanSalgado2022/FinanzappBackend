@@ -85,17 +85,28 @@ def delete_deudor(session: Session, user_id: int, deudor_id: int) -> None:
 
 
 def saldo_restante(session: Session, deudor: Deudor) -> Decimal:
-    total_abonado = session.exec(
-        select(func.coalesce(func.sum(Abono.monto), 0)).where(Abono.deudor_id == deudor.id)
+    # Only the principal portion of each abono (monto - interes) pays down
+    # the loan - interest is income, not repayment, so it must not shrink
+    # what's still owed. See openspec add-abono-interest.
+    total_principal_abonado = session.exec(
+        select(func.coalesce(func.sum(Abono.monto - func.coalesce(Abono.interes, 0)), 0)).where(
+            Abono.deudor_id == deudor.id
+        )
     ).one()
-    return deudor.monto_total - Decimal(total_abonado)
+    return deudor.monto_total - Decimal(total_principal_abonado)
 
 
 def create_abono(
-    session: Session, user_id: int, deudor_id: int, monto: Decimal, fecha: date
+    session: Session,
+    user_id: int,
+    deudor_id: int,
+    monto: Decimal,
+    fecha: date,
+    *,
+    interes: Decimal | None = None,
 ) -> Abono:
     deudor = get_deudor(session, user_id, deudor_id)
-    abono = Abono(deudor_id=deudor.id, monto=monto, fecha=fecha)
+    abono = Abono(deudor_id=deudor.id, monto=monto, fecha=fecha, interes=interes)
     session.add(abono)
     session.commit()
     session.refresh(abono)

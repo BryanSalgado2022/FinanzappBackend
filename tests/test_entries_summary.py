@@ -153,6 +153,58 @@ def test_summary_ignores_variable_expenses_outside_the_requested_month(
     assert as_decimal(summary["balance_neto"]) == Decimal("0")
 
 
+def test_summary_includes_abono_interes_in_the_requested_month(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    deudor = client.post(
+        "/deudores",
+        json={"nombre": "Pedro", "monto_total": "500000", "fecha": "2031-01-01"},
+        headers=headers,
+    ).json()
+    client.post(
+        f"/deudores/{deudor['id']}/abonos",
+        json={"monto": "110000", "fecha": "2031-03-10", "interes": "10000"},
+        headers=headers,
+    )
+
+    summary = client.get("/summary", params={"anio": 2031, "mes": 3}, headers=headers).json()
+    assert as_decimal(summary["total_ingresos"]) == Decimal("10000.00")
+    assert as_decimal(summary["balance_neto"]) == Decimal("10000.00")
+
+
+def test_summary_ignores_abono_interes_outside_the_requested_month(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    deudor = client.post(
+        "/deudores",
+        json={"nombre": "Pedro", "monto_total": "500000", "fecha": "2031-01-01"},
+        headers=headers,
+    ).json()
+    client.post(
+        f"/deudores/{deudor['id']}/abonos",
+        json={"monto": "110000", "fecha": "2031-04-10", "interes": "10000"},
+        headers=headers,
+    )
+
+    summary = client.get("/summary", params={"anio": 2031, "mes": 3}, headers=headers).json()
+    assert as_decimal(summary["total_ingresos"]) == Decimal("0")
+
+
+def test_summary_unaffected_by_abono_with_no_interes(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    deudor = client.post(
+        "/deudores",
+        json={"nombre": "Pedro", "monto_total": "500000", "fecha": "2031-01-01"},
+        headers=headers,
+    ).json()
+    client.post(
+        f"/deudores/{deudor['id']}/abonos",
+        json={"monto": "110000", "fecha": "2031-03-10"},
+        headers=headers,
+    )
+
+    summary = client.get("/summary", params={"anio": 2031, "mes": 3}, headers=headers).json()
+    assert as_decimal(summary["total_ingresos"]) == Decimal("0")
+
+
 def test_fecha_pago_set_on_pagado_transition_and_cleared_on_unpaid(
     client: TestClient, monkeypatch
 ):

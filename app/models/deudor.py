@@ -28,4 +28,9 @@ class Abono(SQLModel, table=True):
     deudor_id: int = Field(foreign_key="deudores.id", index=True, ondelete="CASCADE")
     monto: Decimal = Field(max_digits=14, decimal_places=2)
     fecha: date
+    # How much of `monto` was interest rather than principal repayment -
+    # excluded from the debtor's saldo_restante computation and counted
+    # toward monthly income instead. None/0 means the payment is pure
+    # principal, matching behavior before this field existed.
+    interes: Decimal | None = Field(default=None, max_digits=14, decimal_places=2)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

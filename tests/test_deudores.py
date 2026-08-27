@@ -184,6 +184,58 @@ def test_saldo_restante_fully_paid(client: TestClient, monkeypatch):
     assert response.json()["saldo_restante"] == "0.00"
 
 
+def test_abono_with_interes_recorded(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    created = client.post(
+        "/deudores",
+        json={"nombre": "Juan", "monto_total": "500000", "fecha": "2026-01-01"},
+        headers=headers,
+    )
+    deudor_id = created.json()["id"]
+    response = client.post(
+        f"/deudores/{deudor_id}/abonos",
+        json={"monto": "110000", "fecha": "2026-02-01", "interes": "10000"},
+        headers=headers,
+    )
+    assert response.status_code == 201
+    assert response.json()["interes"] == "10000.00"
+
+
+def test_abono_interes_cannot_exceed_monto(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    created = client.post(
+        "/deudores",
+        json={"nombre": "Juan", "monto_total": "500000", "fecha": "2026-01-01"},
+        headers=headers,
+    )
+    deudor_id = created.json()["id"]
+    response = client.post(
+        f"/deudores/{deudor_id}/abonos",
+        json={"monto": "100000", "fecha": "2026-02-01", "interes": "150000"},
+        headers=headers,
+    )
+    assert response.status_code == 422
+
+
+def test_saldo_restante_excludes_interest_portion(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    created = client.post(
+        "/deudores",
+        json={"nombre": "Juan", "monto_total": "500000", "fecha": "2026-01-01"},
+        headers=headers,
+    )
+    deudor_id = created.json()["id"]
+    client.post(
+        f"/deudores/{deudor_id}/abonos",
+        json={"monto": "110000", "fecha": "2026-02-01", "interes": "10000"},
+        headers=headers,
+    )
+
+    response = client.get(f"/deudores/{deudor_id}", headers=headers)
+    # Only the 100000 principal portion reduces the balance, not the full 110000.
+    assert response.json()["saldo_restante"] == "400000.00"
+
+
 def test_finalizado_en_set_on_close_and_cleared_on_reactivate(client: TestClient, monkeypatch):
     import datetime
 

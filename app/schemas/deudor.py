@@ -1,7 +1,7 @@
 from datetime import date
 from decimal import Decimal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 
 class DeudorCreate(BaseModel):
@@ -33,9 +33,17 @@ class DeudorRead(BaseModel):
 class AbonoCreate(BaseModel):
     monto: Decimal
     fecha: date
+    interes: Decimal | None = None
+
+    @model_validator(mode="after")
+    def _interes_no_excede_monto(self) -> "AbonoCreate":
+        if self.interes is not None and self.interes > self.monto:
+            raise ValueError("interes no puede ser mayor que monto")
+        return self
 
 
 class AbonoRead(BaseModel):
     id: int
     monto: Decimal
     fecha: date
+    interes: Decimal | None

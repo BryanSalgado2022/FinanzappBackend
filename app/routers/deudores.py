@@ -26,7 +26,7 @@ def _to_read(session: Session, deudor: Deudor) -> DeudorRead:
 
 
 def _abono_to_read(abono: Abono) -> AbonoRead:
-    return AbonoRead(id=abono.id, monto=abono.monto, fecha=abono.fecha)
+    return AbonoRead(id=abono.id, monto=abono.monto, fecha=abono.fecha, interes=abono.interes)
 
 
 @router.post("", response_model=DeudorRead, status_code=status.HTTP_201_CREATED)
@@ -112,7 +112,7 @@ def create_abono(
 ) -> AbonoRead:
     try:
         abono = deudor_service.create_abono(
-            session, current_user.id, deudor_id, payload.monto, payload.fecha
+            session, current_user.id, deudor_id, payload.monto, payload.fecha, interes=payload.interes
         )
     except DeudorNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debtor not found") from exc
