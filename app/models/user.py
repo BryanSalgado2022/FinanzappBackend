@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from decimal import Decimal
 
 from sqlmodel import Field, SQLModel
 
@@ -29,4 +30,13 @@ class User(SQLModel, table=True):
     # None means "use the app's default accent color" - a first-class valid
     # state, not merely "not yet set".
     color_acento: str | None = Field(default=None)
+    # Manually-managed savings figure - never computed/adjusted by the app,
+    # see openspec add-available-balance.
+    ahorros: Decimal | None = Field(default=None, max_digits=14, decimal_places=2)
+    # Disponible baseline: "as of saldo_disponible_fecha, I had
+    # saldo_disponible_inicial available." Re-set together (never
+    # independently) whenever the user edits their starting figure - see
+    # app/routers/users.py.
+    saldo_disponible_inicial: Decimal | None = Field(default=None, max_digits=14, decimal_places=2)
+    saldo_disponible_fecha: date | None = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

@@ -1,3 +1,5 @@
+import datetime
+
 from fastapi.testclient import TestClient
 
 from tests.conftest import auth_headers
@@ -54,6 +56,47 @@ def test_patch_empty_body_leaves_accent_color_unchanged(client: TestClient, monk
     response = client.patch("/users/me", json={}, headers=headers)
     assert response.status_code == 200, response.text
     assert response.json()["color_acento"] == "rosa"
+
+
+def test_get_me_defaults_to_no_ahorros_or_disponible(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    response = client.get("/users/me", headers=headers)
+    assert response.json()["ahorros"] is None
+    assert response.json()["saldo_disponible_inicial"] is None
+    assert response.json()["saldo_disponible_fecha"] is None
+
+
+def test_patch_sets_and_clears_ahorros(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    patch = client.patch("/users/me", json={"ahorros": "1500000"}, headers=headers)
+    assert patch.status_code == 200, patch.text
+    assert patch.json()["ahorros"] == "1500000.00"
+
+    clear = client.patch("/users/me", json={"ahorros": None}, headers=headers)
+    assert clear.json()["ahorros"] is None
+
+
+def test_patch_saldo_disponible_inicial_records_todays_date(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    response = client.patch(
+        "/users/me", json={"saldo_disponible_inicial": "2000000"}, headers=headers
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["saldo_disponible_inicial"] == "2000000.00"
+    assert response.json()["saldo_disponible_fecha"] == datetime.date.today().isoformat()
+
+
+def test_patch_saldo_disponible_inicial_again_replaces_value_and_date(
+    client: TestClient, monkeypatch
+):
+    headers = _headers(client, monkeypatch)
+    client.patch("/users/me", json={"saldo_disponible_inicial": "2000000"}, headers=headers)
+
+    response = client.patch(
+        "/users/me", json={"saldo_disponible_inicial": "3000000"}, headers=headers
+    )
+    assert response.json()["saldo_disponible_inicial"] == "3000000.00"
+    assert response.json()["saldo_disponible_fecha"] == datetime.date.today().isoformat()
 
 
 def test_users_me_scoped_to_authenticated_user(client: TestClient, monkeypatch):

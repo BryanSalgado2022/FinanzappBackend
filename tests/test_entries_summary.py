@@ -153,6 +153,54 @@ def test_summary_ignores_variable_expenses_outside_the_requested_month(
     assert as_decimal(summary["balance_neto"]) == Decimal("0")
 
 
+def test_summary_uses_planned_amount_for_unpaid_entries(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    sueldo = client.post(
+        "/concepts", json={"nombre": "Sueldo", "tipo": "ingreso"}, headers=headers
+    ).json()
+    client.put(
+        f"/concepts/{sueldo['id']}/entries/2031/6",
+        json={"monto_planeado": "10000000.00"},
+        headers=headers,
+    )
+
+    summary = client.get("/summary", params={"anio": 2031, "mes": 6}, headers=headers).json()
+    assert as_decimal(summary["total_ingresos"]) == Decimal("10000000.00")
+
+
+def test_summary_uses_paid_amount_when_it_differs_from_planned(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    sueldo = client.post(
+        "/concepts", json={"nombre": "Sueldo", "tipo": "ingreso"}, headers=headers
+    ).json()
+    # Planned 10.000.000, but only 9.500.000 actually arrived - reproduces
+    # the reported scenario exactly.
+    client.put(
+        f"/concepts/{sueldo['id']}/entries/2031/6",
+        json={"monto_planeado": "10000000.00", "monto_pagado": "9500000.00", "pagado": True},
+        headers=headers,
+    )
+
+    summary = client.get("/summary", params={"anio": 2031, "mes": 6}, headers=headers).json()
+    assert as_decimal(summary["total_ingresos"]) == Decimal("9500000.00")
+    assert as_decimal(summary["balance_neto"]) == Decimal("9500000.00")
+
+
+def test_summary_uses_paid_amount_for_overpaid_gasto_fijo(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    pago = client.post(
+        "/concepts", json={"nombre": "Internet", "tipo": "gasto_fijo"}, headers=headers
+    ).json()
+    client.put(
+        f"/concepts/{pago['id']}/entries/2031/6",
+        json={"monto_planeado": "50000.00", "monto_pagado": "55000.00", "pagado": True},
+        headers=headers,
+    )
+
+    summary = client.get("/summary", params={"anio": 2031, "mes": 6}, headers=headers).json()
+    assert as_decimal(summary["total_gastos"]) == Decimal("55000.00")
+
+
 def test_summary_includes_abono_interes_in_the_requested_month(client: TestClient, monkeypatch):
     headers = _headers(client, monkeypatch)
     deudor = client.post(
