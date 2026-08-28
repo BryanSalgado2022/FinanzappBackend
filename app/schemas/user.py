@@ -1,4 +1,3 @@
-from datetime import date
 from decimal import Decimal
 
 from pydantic import BaseModel, model_validator
@@ -12,14 +11,11 @@ class UserRead(BaseModel):
     name: str
     color_acento: str | None
     ahorros: Decimal | None
-    saldo_disponible_inicial: Decimal | None
-    saldo_disponible_fecha: date | None
 
 
 class UserUpdate(BaseModel):
     color_acento: str | None = None
     ahorros: Decimal | None = None
-    saldo_disponible_inicial: Decimal | None = None
 
     @model_validator(mode="after")
     def validate_color_acento(self) -> "UserUpdate":
