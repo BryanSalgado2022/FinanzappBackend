@@ -13,7 +13,7 @@
 
 - [x] 3.1 Add `app/schemas/calendar.py` (or similar) with the token response schema.
 - [x] 3.2 Create `app/routers/calendar.py`: `GET /calendar/export` (JWT via `get_current_user`, returns `text/calendar` response with `generate_ics`).
-- [x] 3.3 Add `POST /calendar/token`: generates a fresh `secrets.token_urlsafe(32)`, overwrites `current_user.ics_token`, returns it.
+- [x] 3.3 Add `POST /calendar/token`: generates a fresh `secrets.token_urlsafe(32)`, overwrites `current_user.ics_token`, returns it. Add `GET /calendar/token`: returns the current token (or null) without regenerating, so the frontend can display an already-generated subscribe URL after a page reload without invalidating it.
 - [x] 3.4 Add `GET /calendar/subscribe/{token}`: no auth dependency, looks up `User` by `ics_token`, 404 if no match, otherwise returns `generate_ics` for that user.
 - [x] 3.5 Register the router in `app/main.py`.
 

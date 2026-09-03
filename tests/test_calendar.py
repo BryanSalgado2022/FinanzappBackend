@@ -112,6 +112,24 @@ def test_export_scoped_to_authenticated_user(client: TestClient, monkeypatch):
     assert "SoloDeA" not in response.text
 
 
+def test_get_token_status_before_generation(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    response = client.get("/calendar/token", headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["ics_token"] is None
+
+
+def test_get_token_status_after_generation_does_not_change_it(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    created = client.post("/calendar/token", headers=headers).json()["ics_token"]
+
+    status_response = client.get("/calendar/token", headers=headers)
+    assert status_response.json()["ics_token"] == created
+
+    status_response_again = client.get("/calendar/token", headers=headers)
+    assert status_response_again.json()["ics_token"] == created
+
+
 def test_create_token_first_time(client: TestClient, monkeypatch):
     headers = _headers(client, monkeypatch)
     response = client.post("/calendar/token", headers=headers)

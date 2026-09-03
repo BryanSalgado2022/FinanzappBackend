@@ -37,11 +37,15 @@ The system SHALL include only events dated from 3 months before today through 12
 - **THEN** the included window shifts forward accordingly, since it's always relative to the current date at request time
 
 ### Requirement: Token-based subscription
-The system SHALL let an authenticated user generate a secret token via `POST /calendar/token`, and SHALL serve the same `.ics` content, without requiring authentication, at `GET /calendar/subscribe/{token}` for a valid token.
+The system SHALL let an authenticated user generate a secret token via `POST /calendar/token`, view their current token (if any) via `GET /calendar/token` without changing it, and SHALL serve the same `.ics` content, without requiring authentication, at `GET /calendar/subscribe/{token}` for a valid token.
 
 #### Scenario: Generating a token for the first time
 - **WHEN** an authenticated user with no existing token requests `POST /calendar/token`
 - **THEN** the system creates and returns a new secret token
+
+#### Scenario: Viewing the current token without regenerating
+- **WHEN** an authenticated user requests `GET /calendar/token`
+- **THEN** the system returns their existing token unchanged, or none if they've never generated one, without invalidating anything
 
 #### Scenario: Subscribing with a valid token
 - **WHEN** a request is made to `GET /calendar/subscribe/{token}` with a token that belongs to a user

@@ -6,7 +6,7 @@ from sqlmodel import Session, select
 from app.database import get_session
 from app.dependencies import get_current_user
 from app.models.user import User
-from app.schemas.calendar import IcsTokenRead
+from app.schemas.calendar import IcsTokenRead, IcsTokenStatus
 from app.services.ics_service import generate_ics
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
@@ -20,6 +20,11 @@ def export_calendar(
     session: Session = Depends(get_session),
 ) -> Response:
     return Response(content=generate_ics(session, current_user), media_type=ICS_MEDIA_TYPE)
+
+
+@router.get("/token", response_model=IcsTokenStatus)
+def get_token_status(current_user: User = Depends(get_current_user)) -> IcsTokenStatus:
+    return IcsTokenStatus(ics_token=current_user.ics_token)
 
 
 @router.post("/token", response_model=IcsTokenRead)
