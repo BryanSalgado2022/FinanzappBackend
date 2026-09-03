@@ -32,4 +32,8 @@ class User(SQLModel, table=True):
     color_acento: str | None = Field(default=None)
     # Manually-managed savings figure - never computed/adjusted by the app.
     ahorros: Decimal | None = Field(default=None, max_digits=14, decimal_places=2)
+    # Secret, regenerable token identifying this user for the unauthenticated
+    # calendar-subscribe endpoint - see app/routers/calendar.py. None until
+    # the user first generates one.
+    ics_token: str | None = Field(default=None, unique=True, index=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

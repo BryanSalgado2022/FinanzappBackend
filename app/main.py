@@ -5,6 +5,7 @@ from app.config import get_settings
 from app.routers import (
     agent,
     auth,
+    calendar,
     categorias,
     concepts,
     debts,
@@ -28,6 +29,7 @@ app.add_middleware(
 
 app.include_router(agent.router)
 app.include_router(auth.router)
+app.include_router(calendar.router)
 app.include_router(categorias.router)
 app.include_router(concepts.router)
 app.include_router(debts.router)
