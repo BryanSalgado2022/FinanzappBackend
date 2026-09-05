@@ -6,7 +6,7 @@ Lets an authenticated user view and update account-level preferences that person
 ## Requirements
 
 ### Requirement: View current preferences
-The system SHALL let an authenticated user retrieve their own profile, including their currently selected accent color (or its absence, meaning the app default applies) and their `ahorros` savings figure (or its absence, meaning it has never been set).
+The system SHALL let an authenticated user retrieve their own profile, including their currently selected accent color (or its absence, meaning the app default applies) and their computed `ahorros` savings balance, which is always present (defaulting to zero) since it is now sourced from their savings ledger rather than a manually-set value.
 
 #### Scenario: User has chosen an accent color
 - **WHEN** an authenticated user requests their profile and has previously set an accent color
@@ -17,8 +17,8 @@ The system SHALL let an authenticated user retrieve their own profile, including
 - **THEN** the system returns no color identifier, meaning the app's default applies
 
 #### Scenario: User has set a savings figure
-- **WHEN** an authenticated user requests their profile and has previously set `ahorros`
-- **THEN** the system returns that value
+- **WHEN** an authenticated user requests their profile and has recorded one or more savings ledger entries
+- **THEN** the system returns their computed running balance
 
 #### Scenario: User has not configured Disponible tracking
 - **WHEN** an authenticated user requests their profile
@@ -43,19 +43,8 @@ The system SHALL let an authenticated user clear their accent color selection, r
 - **THEN** subsequent profile reads report no color identifier, meaning the app default applies again
 
 ### Requirement: Preferences are scoped to the authenticated user
-The system SHALL ensure a user can only view or modify their own preferences, including `ahorros`, never another user's.
+The system SHALL ensure a user can only view or modify their own preferences, never another user's.
 
 #### Scenario: Requests always act on the authenticated user
 - **WHEN** an authenticated user views or updates preferences
 - **THEN** the system only ever reads or writes that same user's own record, regardless of any other identifier
-
-### Requirement: Set or clear the savings figure
-The system SHALL let an authenticated user set their `ahorros` figure to any value, or clear it back to unset, with no validation beyond it being a valid amount.
-
-#### Scenario: Setting a savings figure
-- **WHEN** a user sets `ahorros` to a value
-- **THEN** the system saves it and subsequent profile reads return it
-
-#### Scenario: Clearing the savings figure
-- **WHEN** a user who previously set `ahorros` clears it
-- **THEN** subsequent profile reads report no value for `ahorros`

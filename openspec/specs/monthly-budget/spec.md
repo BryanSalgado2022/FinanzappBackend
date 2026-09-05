@@ -52,7 +52,7 @@ The system SHALL automatically create monthly entries for the remaining months o
 - **THEN** the system does not generate further monthly entries for it
 
 ### Requirement: Monthly net balance summary
-The system SHALL provide, for a given user/year/month, a summary that computes `balance_neto` as the sum, across that user's active `ingreso` concepts for that month, of each entry's `monto_pagado` when paid or `monto_planeado` when not yet paid, plus the sum of `interes` across that user's abonos whose `fecha` falls in that month, minus the same paid-or-planned sum across that user's active `deuda` and `gasto_fijo` concepts for that month, minus the sum of that user's `Gasto.monto` whose `fecha` falls in that month.
+The system SHALL provide, for a given user/year/month, a summary that computes `balance_neto` as the sum, across that user's active `ingreso` concepts for that month, of each entry's `monto_pagado` when paid or `monto_planeado` when not yet paid, plus the sum of `interes` across that user's abonos whose `fecha` falls in that month, plus the sum of `interes` across that user's paid debtor installments whose payment date falls in that month, minus the same paid-or-planned sum across that user's active `deuda` and `gasto_fijo` concepts for that month, minus the sum of that user's `Gasto.monto` whose `fecha` falls in that month.
 
 #### Scenario: Positive balance
 - **WHEN** a user's planned income for a month exceeds their planned debts, fixed expenses, and variable expenses for that month
@@ -89,6 +89,18 @@ The system SHALL provide, for a given user/year/month, a summary that computes `
 #### Scenario: An underpaid income entry does not overstate the summary
 - **WHEN** a user marks an `ingreso` entry paid with `monto_pagado` less than its `monto_planeado`
 - **THEN** the summary's `total_ingresos` and `balance_neto` reflect the smaller amount actually received, not the originally planned amount
+
+#### Scenario: A paid debtor installment's interest contributes to total income
+- **WHEN** a user marks one of their amortized debtor's scheduled installments paid, and its recorded payment date falls in the requested year/month
+- **THEN** the summary's `total_ingresos` and resulting `balance_neto` include that installment's `interes` amount
+
+#### Scenario: An unpaid debtor installment does not affect the summary
+- **WHEN** an amortized debtor has a scheduled installment that is not yet marked paid
+- **THEN** the summary is unaffected by that installment, regardless of its scheduled year/month
+
+#### Scenario: A debtor installment's principal does not affect the summary
+- **WHEN** a user marks a debtor installment paid
+- **THEN** the summary is affected only by that installment's `interes`, not by the principal portion of the amount paid
 
 ### Requirement: Auto-generation uses the amortization schedule for amortized debts
 The system SHALL, for a debt concept with amortization data, generate monthly entries for its amortization schedule from its starting installment (installment 1 by default, or `cuota_inicial` when set) through `numero_cuotas` (one entry per installment, spanning beyond the current calendar year if needed) at creation time, using each installment's fixed amount from the schedule instead of the copy-last-amount-forward behavior used for other recurring concepts.
@@ -184,3 +196,22 @@ The system SHALL allow a user to delete a single monthly entry of a concept, res
 #### Scenario: A deleted entry is not specially protected from re-generation
 - **WHEN** the deleted entry was for the real current month of an indefinite recurring concept, and an earlier entry exists to copy an amount from
 - **THEN** the system's existing year-extension behavior may regenerate that month's entry the next time the concept's entries are listed, unchanged from that behavior's normal rules
+
+### Requirement: Recalculating amortization terms preserves paid entries and regenerates the rest
+The system SHALL, when a debt concept's amortization terms are corrected, leave every already-paid monthly entry completely unchanged (`monto_planeado`, `monto_pagado`, `pagado`, `fecha_pago` all untouched), delete every not-yet-paid entry, and generate a fresh set of entries for the remaining installments using the new terms, continuing the calendar sequence from the month immediately after the latest paid entry (or from the current month, if none has been paid yet).
+
+#### Scenario: Paid entries are untouched by recalculation
+- **WHEN** a debt concept has one or more paid entries and its amortization terms are corrected
+- **THEN** those paid entries' amounts and paid status remain exactly as they were before the correction
+
+#### Scenario: Unpaid entries are replaced with the new schedule
+- **WHEN** a debt concept has unpaid entries (past or future) and its amortization terms are corrected
+- **THEN** those entries are removed and replaced with entries computed from the new fixed installment amount
+
+#### Scenario: Regeneration continues the calendar sequence after the last paid entry
+- **WHEN** a debt concept with paid entries through a given month has its terms corrected
+- **THEN** the newly generated entries begin the month immediately following that last paid month, without a gap or overlap
+
+#### Scenario: Regeneration starts from today when nothing has been paid
+- **WHEN** a debt concept with no paid entries yet has its amortization terms corrected
+- **THEN** the newly generated entries begin at the current month, same as at creation time
