@@ -26,6 +26,36 @@ def calcular_cuota_fija(principal: Decimal, tasa_mensual: Decimal, numero_cuotas
     return cuota.quantize(CENTS, rounding=ROUND_HALF_UP)
 
 
+def calcular_cuotas_restantes(principal: Decimal, tasa_mensual: Decimal, cuota_fija: Decimal) -> int:
+    """The inverse of calcular_cuota_fija: given a fixed installment and a
+    remaining principal, how many installments (at that same fixed payment)
+    are needed to pay it off. Simulates the same per-period interest/capital
+    split generar_tabla_amortizacion uses, rather than a closed-form log
+    formula, to stay consistent with the rest of this module (Decimal only,
+    no new float usage). Used for 'reducir plazo' principal prepayments:
+    the cuota stays the same, the term shortens - see design.md."""
+    if tasa_mensual == 0:
+        cuotas = principal / cuota_fija
+        entero = int(cuotas)
+        return entero if Decimal(entero) == cuotas else entero + 1
+
+    saldo = principal
+    numero = 0
+    while saldo > 0:
+        interes = (saldo * tasa_mensual).quantize(CENTS, rounding=ROUND_HALF_UP)
+        if cuota_fija <= interes:
+            raise ValueError(
+                "cuota_fija does not cover the interest on this balance; "
+                "cannot shorten the term at this payment amount"
+            )
+        abono_capital = cuota_fija - interes
+        saldo = saldo - abono_capital
+        numero += 1
+        if numero > 1200:
+            raise ValueError("could not determine a reasonable number of installments")
+    return numero
+
+
 def generar_tabla_amortizacion(
     principal: Decimal, tasa_mensual: Decimal, numero_cuotas: int
 ) -> list[dict]:

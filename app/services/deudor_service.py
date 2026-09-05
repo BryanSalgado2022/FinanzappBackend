@@ -8,6 +8,7 @@ from app.models.deudor import Abono, CuotaDeudor, Deudor
 from app.services import cuota_deudor_service
 from app.services.amortization_service import (
     calcular_cuota_fija,
+    calcular_cuotas_restantes,
     generar_tabla_amortizacion,
     tasa_mensual_desde,
 )
@@ -136,7 +137,16 @@ def saldo_restante(session: Session, deudor: Deudor) -> Decimal:
                 CuotaDeudor.deudor_id == deudor.id
             )
         ).one()
-        restante = monto_total_efectivo(deudor) - Decimal(total_pagado)
+        # Principal prepayments recorded via registrar_abono_capital also
+        # reduce the balance - gated on es_abono_capital specifically (not
+        # every Abono) so that any abono recorded BEFORE the debtor was
+        # amortized stays pure history, per add-activate-amortization.
+        total_abonos_capital = session.exec(
+            select(func.coalesce(func.sum(Abono.monto), 0)).where(
+                Abono.deudor_id == deudor.id, Abono.es_abono_capital.is_(True)
+            )
+        ).one()
+        restante = monto_total_efectivo(deudor) - Decimal(total_pagado) - Decimal(total_abonos_capital)
         return restante if restante > 0 else Decimal("0")
 
     # Only the principal portion of each abono (monto - interes) pays down
@@ -150,9 +160,30 @@ def saldo_restante(session: Session, deudor: Deudor) -> Decimal:
     return deudor.monto_total - Decimal(total_principal_abonado)
 
 
-def cuota_fija(deudor: Deudor) -> Decimal | None:
+def cuota_fija(session: Session, deudor: Deudor) -> Decimal | None:
+    """Reads the fixed installment from the actual schedule (the next
+    not-yet-paid cuota's planned amount) rather than recomputing it from
+    stored terms - see design.md (add-abono-capital): a principal
+    prepayment can change the remaining schedule without touching
+    monto_total/numero_cuotas, which stay as historical record of the
+    original loan. Falls back to the most recent cuota if none are unpaid,
+    or the stored-terms computation if no schedule exists at all yet."""
     if not es_amortizado(deudor):
         return None
+    proxima = session.exec(
+        select(CuotaDeudor)
+        .where(CuotaDeudor.deudor_id == deudor.id, CuotaDeudor.pagado.is_(False))
+        .order_by(CuotaDeudor.anio, CuotaDeudor.mes)
+    ).first()
+    if proxima is not None:
+        return proxima.monto_planeado
+    ultima = session.exec(
+        select(CuotaDeudor)
+        .where(CuotaDeudor.deudor_id == deudor.id)
+        .order_by(CuotaDeudor.anio.desc(), CuotaDeudor.mes.desc())
+    ).first()
+    if ultima is not None:
+        return ultima.monto_planeado
     tasa_mensual = tasa_mensual_desde(deudor.tasa_interes, deudor.periodo_tasa)
     return calcular_cuota_fija(deudor.monto_total, tasa_mensual, deudor.numero_cuotas)
 
@@ -259,6 +290,89 @@ def activar_amortizacion(
 
     hoy = date.today()
     return deudor, hoy.year, hoy.month
+
+
+def registrar_abono_capital(
+    session: Session,
+    user_id: int,
+    deudor_id: int,
+    *,
+    monto: Decimal,
+    fecha: date,
+    modo: str,
+) -> Deudor:
+    """Records an extraordinary principal prepayment against an amortized
+    debtor - see design.md (add-abono-capital). monto_total/numero_cuotas
+    stay as historical record of the original loan (only numero_cuotas is
+    bumped to reflect the new total installment count); the reduction is
+    tracked via an Abono row instead, which saldo_restante now also
+    subtracts. Fully settling the balance closes the debtor, mirroring the
+    existing activo/finalizado_en transition."""
+    deudor = get_deudor(session, user_id, deudor_id)
+    if not es_amortizado(deudor):
+        raise ValueError(
+            "principal prepayments only apply to amortized debtors; use a "
+            "regular abono instead"
+        )
+
+    abono = Abono(deudor_id=deudor.id, monto=monto, fecha=fecha, interes=None, es_abono_capital=True)
+    session.add(abono)
+    session.commit()
+
+    nuevo_saldo = saldo_restante(session, deudor)
+
+    cuotas = list(session.exec(select(CuotaDeudor).where(CuotaDeudor.deudor_id == deudor.id)))
+
+    if nuevo_saldo <= 0:
+        for cuota in cuotas:
+            if not cuota.pagado:
+                session.delete(cuota)
+        if deudor.activo:
+            deudor.activo = False
+            deudor.finalizado_en = date.today()
+            session.add(deudor)
+        session.commit()
+        session.refresh(deudor)
+        return deudor
+
+    pagadas = [c for c in cuotas if c.pagado]
+    n_pagadas = len(pagadas)
+    siguiente_numero = (deudor.cuota_inicial or 1) + n_pagadas
+
+    if pagadas:
+        anio_ultimo, mes_ultimo = max((c.anio, c.mes) for c in pagadas)
+        anio_inicio, mes_inicio = _sumar_un_mes(anio_ultimo, mes_ultimo)
+    else:
+        hoy = date.today()
+        anio_inicio, mes_inicio = hoy.year, hoy.month
+
+    tasa_mensual = tasa_mensual_desde(deudor.tasa_interes, deudor.periodo_tasa)
+    cuota_fija_actual = cuota_fija(session, deudor)
+
+    if modo == "reducir_cuota":
+        numero_cuotas_restantes = deudor.numero_cuotas - siguiente_numero + 1
+    elif modo == "reducir_plazo":
+        numero_cuotas_restantes = calcular_cuotas_restantes(nuevo_saldo, tasa_mensual, cuota_fija_actual)
+    else:
+        raise ValueError("modo must be 'reducir_plazo' or 'reducir_cuota'")
+
+    if numero_cuotas_restantes <= 0:
+        raise ValueError("this debtor's schedule has no remaining installments to adjust")
+
+    for cuota in cuotas:
+        if not cuota.pagado:
+            session.delete(cuota)
+
+    deudor.numero_cuotas = (siguiente_numero - 1) + numero_cuotas_restantes
+    session.add(deudor)
+    session.commit()
+    session.refresh(deudor)
+
+    tabla = generar_tabla_amortizacion(nuevo_saldo, tasa_mensual, numero_cuotas_restantes)
+    cuota_deudor_service.generar_cuotas_amortizacion(
+        session, deudor, tabla, anio_inicio, mes_inicio, cuota_inicial=1
+    )
+    return deudor
 
 
 def create_abono(

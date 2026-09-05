@@ -6,6 +6,7 @@ from app.dependencies import get_current_user
 from app.models.deudor import Abono, Deudor
 from app.models.user import User
 from app.schemas.deudor import (
+    AbonoCapitalCreate,
     AbonoCreate,
     AbonoRead,
     DeudorAmortizacionActivar,
@@ -31,7 +32,7 @@ def _to_read(session: Session, deudor: Deudor) -> DeudorRead:
         tasa_interes=deudor.tasa_interes,
         periodo_tasa=deudor.periodo_tasa,
         numero_cuotas=deudor.numero_cuotas,
-        cuota_fija=deudor_service.cuota_fija(deudor),
+        cuota_fija=deudor_service.cuota_fija(session, deudor),
         cuota_inicial=deudor.cuota_inicial,
         activo=deudor.activo,
         finalizado_en=deudor.finalizado_en,
@@ -40,7 +41,13 @@ def _to_read(session: Session, deudor: Deudor) -> DeudorRead:
 
 
 def _abono_to_read(abono: Abono) -> AbonoRead:
-    return AbonoRead(id=abono.id, monto=abono.monto, fecha=abono.fecha, interes=abono.interes)
+    return AbonoRead(
+        id=abono.id,
+        monto=abono.monto,
+        fecha=abono.fecha,
+        interes=abono.interes,
+        es_abono_capital=abono.es_abono_capital,
+    )
 
 
 @router.post("", response_model=DeudorRead, status_code=status.HTTP_201_CREATED)
@@ -184,6 +191,29 @@ def update_amortizacion(
     cuota_deudor_service.generar_cuotas_amortizacion(
         session, deudor, tabla, anio_inicio, mes_inicio, cuota_inicial=siguiente_numero
     )
+    return _to_read(session, deudor)
+
+
+@router.post("/{deudor_id}/abono-capital", response_model=DeudorRead)
+def registrar_abono_capital(
+    deudor_id: int,
+    payload: AbonoCapitalCreate,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> DeudorRead:
+    try:
+        deudor = deudor_service.registrar_abono_capital(
+            session,
+            current_user.id,
+            deudor_id,
+            monto=payload.monto,
+            fecha=payload.fecha,
+            modo=payload.modo.value,
+        )
+    except DeudorNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debtor not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     return _to_read(session, deudor)
 
 

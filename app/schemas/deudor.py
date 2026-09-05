@@ -1,9 +1,15 @@
+import enum
 from datetime import date
 from decimal import Decimal
 
 from pydantic import BaseModel, Field, model_validator
 
 from app.models.concepto import PeriodoTasa
+
+
+class ModoAbonoCapital(str, enum.Enum):
+    REDUCIR_PLAZO = "reducir_plazo"
+    REDUCIR_CUOTA = "reducir_cuota"
 
 
 class DeudorCreate(BaseModel):
@@ -132,3 +138,15 @@ class AbonoRead(BaseModel):
     monto: Decimal
     fecha: date
     interes: Decimal | None
+    es_abono_capital: bool
+
+
+class AbonoCapitalCreate(BaseModel):
+    """Records an extraordinary principal prepayment against an amortized
+    debtor - see deudor_service.registrar_abono_capital. Always pure
+    principal (mirrors AbonoCreate but with no interes field at all, since
+    an abono a capital is never partly interest by definition)."""
+
+    monto: Decimal = Field(gt=0)
+    fecha: date
+    modo: ModoAbonoCapital

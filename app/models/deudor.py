@@ -44,6 +44,13 @@ class Abono(SQLModel, table=True):
     # toward monthly income instead. None/0 means the payment is pure
     # principal, matching behavior before this field existed.
     interes: Decimal | None = Field(default=None, max_digits=14, decimal_places=2)
+    # True only for abonos created via deudor_service.registrar_abono_capital
+    # (an extraordinary principal prepayment on an already-amortized
+    # debtor) - these DO reduce saldo_restante once amortized, unlike any
+    # Abono recorded before the debtor was amortized, which stays pure
+    # history (see add-activate-amortization). Regular create_abono always
+    # sets this False and stays blocked once amortized regardless.
+    es_abono_capital: bool = Field(default=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
