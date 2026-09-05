@@ -197,6 +197,53 @@ def actualizar_amortizacion(
     return concepto, anio_inicio, mes_inicio, siguiente_numero
 
 
+def activar_amortizacion(
+    session: Session,
+    user_id: int,
+    concepto_id: int,
+    *,
+    valor_total: Decimal,
+    tasa_interes: Decimal,
+    periodo_tasa: PeriodoTasa,
+    numero_cuotas: int,
+    cuota_inicial: int | None,
+) -> tuple[Concepto, int, int]:
+    """Sets amortization terms for the first time on a debt concept that
+    doesn't yet have them. Unlike actualizar_amortizacion, this behaves like
+    fresh creation math-wise: anchored at today, cuota_inicial comes purely
+    from the caller (not derived from paid-entry count) - see design.md.
+    Every not-yet-paid entry is deleted; paid ones are left untouched as
+    historical record. Returns (concepto, anio_inicio, mes_inicio) for the
+    router to pass into entry_service.generar_entradas_amortizacion."""
+    concepto = get_concepto(session, user_id, concepto_id)
+    if concepto.tipo != TipoConcepto.DEUDA:
+        raise ValueError("amortization terms only apply to concepts of type 'deuda'")
+    if es_amortizada(concepto):
+        raise ValueError(
+            "this concept already has amortization terms; use the correction "
+            "endpoint instead"
+        )
+
+    entradas = list(
+        session.exec(select(EntradaMensual).where(EntradaMensual.concepto_id == concepto.id))
+    )
+    for entrada in entradas:
+        if not entrada.pagado:
+            session.delete(entrada)
+
+    concepto.valor_total = valor_total
+    concepto.tasa_interes = tasa_interes
+    concepto.periodo_tasa = periodo_tasa
+    concepto.numero_cuotas = numero_cuotas
+    concepto.cuota_inicial = cuota_inicial
+    session.add(concepto)
+    session.commit()
+    session.refresh(concepto)
+
+    hoy = date.today()
+    return concepto, hoy.year, hoy.month
+
+
 def delete_concepto(session: Session, user_id: int, concepto_id: int) -> None:
     concepto = get_concepto(session, user_id, concepto_id)
     session.delete(concepto)

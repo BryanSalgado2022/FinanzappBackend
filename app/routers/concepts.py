@@ -9,6 +9,7 @@ from app.models.concepto import Concepto, TipoConcepto
 from app.models.user import User
 from app.schemas.categoria import CategoriaRead
 from app.schemas.concepto import (
+    ConceptoAmortizacionActivar,
     ConceptoAmortizacionUpdate,
     ConceptoCreate,
     ConceptoRead,
@@ -154,6 +155,42 @@ def update_concept(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Concept not found") from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    return _to_read(session, concepto)
+
+
+@router.post("/{concepto_id}/amortizacion", response_model=ConceptoRead)
+def activar_amortizacion(
+    concepto_id: int,
+    payload: ConceptoAmortizacionActivar,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> ConceptoRead:
+    try:
+        concepto, anio_inicio, mes_inicio = concept_service.activar_amortizacion(
+            session,
+            current_user.id,
+            concepto_id,
+            valor_total=payload.valor_total,
+            tasa_interes=payload.tasa_interes,
+            periodo_tasa=payload.periodo_tasa,
+            numero_cuotas=payload.numero_cuotas,
+            cuota_inicial=payload.cuota_inicial,
+        )
+    except ConceptoNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Concept not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+    tasa_mensual = tasa_mensual_desde(concepto.tasa_interes, concepto.periodo_tasa)
+    tabla = generar_tabla_amortizacion(concepto.valor_total, tasa_mensual, concepto.numero_cuotas)
+    entry_service.generar_entradas_amortizacion(
+        session,
+        concepto,
+        tabla,
+        anio_inicio,
+        mes_inicio,
+        cuota_inicial=concepto.cuota_inicial or 1,
+    )
     return _to_read(session, concepto)
 
 

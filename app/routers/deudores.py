@@ -8,6 +8,7 @@ from app.models.user import User
 from app.schemas.deudor import (
     AbonoCreate,
     AbonoRead,
+    DeudorAmortizacionActivar,
     DeudorAmortizacionUpdate,
     DeudorCreate,
     DeudorRead,
@@ -118,6 +119,42 @@ def delete_deudor(
         deudor_service.delete_deudor(session, current_user.id, deudor_id)
     except DeudorNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debtor not found") from exc
+
+
+@router.post("/{deudor_id}/amortizacion", response_model=DeudorRead)
+def activar_amortizacion(
+    deudor_id: int,
+    payload: DeudorAmortizacionActivar,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> DeudorRead:
+    try:
+        deudor, anio_inicio, mes_inicio = deudor_service.activar_amortizacion(
+            session,
+            current_user.id,
+            deudor_id,
+            monto_total=payload.monto_total,
+            tasa_interes=payload.tasa_interes,
+            periodo_tasa=payload.periodo_tasa,
+            numero_cuotas=payload.numero_cuotas,
+            cuota_inicial=payload.cuota_inicial,
+        )
+    except DeudorNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debtor not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+    tasa_mensual = tasa_mensual_desde(deudor.tasa_interes, deudor.periodo_tasa)
+    tabla = generar_tabla_amortizacion(deudor.monto_total, tasa_mensual, deudor.numero_cuotas)
+    cuota_deudor_service.generar_cuotas_amortizacion(
+        session,
+        deudor,
+        tabla,
+        anio_inicio,
+        mes_inicio,
+        cuota_inicial=deudor.cuota_inicial or 1,
+    )
+    return _to_read(session, deudor)
 
 
 @router.put("/{deudor_id}/amortizacion", response_model=DeudorRead)

@@ -217,6 +217,50 @@ def actualizar_amortizacion(
     return deudor, anio_inicio, mes_inicio, siguiente_numero
 
 
+def activar_amortizacion(
+    session: Session,
+    user_id: int,
+    deudor_id: int,
+    *,
+    monto_total: Decimal,
+    tasa_interes: Decimal,
+    periodo_tasa: PeriodoTasa,
+    numero_cuotas: int,
+    cuota_inicial: int | None,
+) -> tuple[Deudor, int, int]:
+    """Sets amortization terms for the first time on a debtor that doesn't
+    yet have them. Unlike actualizar_amortizacion, this behaves like fresh
+    creation math-wise: anchored at today, cuota_inicial comes purely from
+    the caller (not derived from paid-cuota count) - see design.md. Every
+    not-yet-paid cuota is deleted; existing abonos are left untouched as
+    historical record and no longer feed saldo_restante once amortized.
+    Returns (deudor, anio_inicio, mes_inicio) for the router to pass into
+    cuota_deudor_service.generar_cuotas_amortizacion."""
+    deudor = get_deudor(session, user_id, deudor_id)
+    if es_amortizado(deudor):
+        raise ValueError(
+            "this debtor already has amortization terms; use the correction "
+            "endpoint instead"
+        )
+
+    cuotas = list(session.exec(select(CuotaDeudor).where(CuotaDeudor.deudor_id == deudor.id)))
+    for cuota in cuotas:
+        if not cuota.pagado:
+            session.delete(cuota)
+
+    deudor.monto_total = monto_total
+    deudor.tasa_interes = tasa_interes
+    deudor.periodo_tasa = periodo_tasa
+    deudor.numero_cuotas = numero_cuotas
+    deudor.cuota_inicial = cuota_inicial
+    session.add(deudor)
+    session.commit()
+    session.refresh(deudor)
+
+    hoy = date.today()
+    return deudor, hoy.year, hoy.month
+
+
 def create_abono(
     session: Session,
     user_id: int,

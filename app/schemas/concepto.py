@@ -111,6 +111,25 @@ class ConceptoAmortizacionUpdate(BaseModel):
     numero_cuotas: int
 
 
+class ConceptoAmortizacionActivar(BaseModel):
+    """Sets amortization terms for the first time on a debt concept that
+    doesn't yet have them - see concept_service.activar_amortizacion.
+    Distinct from ConceptoAmortizacionUpdate: cuota_inicial IS accepted here
+    (mirrors ConceptoCreate, for a loan that predates the app)."""
+
+    valor_total: Decimal
+    tasa_interes: Decimal
+    periodo_tasa: PeriodoTasa
+    numero_cuotas: int
+    cuota_inicial: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def validate_cuota_inicial(self) -> "ConceptoAmortizacionActivar":
+        if self.cuota_inicial is not None and self.cuota_inicial > self.numero_cuotas:
+            raise ValueError("cuota_inicial cannot be greater than numero_cuotas")
+        return self
+
+
 class ConceptoRead(BaseModel):
     id: int
     nombre: str

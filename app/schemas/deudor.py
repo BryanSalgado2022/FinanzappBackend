@@ -63,6 +63,25 @@ class DeudorAmortizacionUpdate(BaseModel):
     numero_cuotas: int
 
 
+class DeudorAmortizacionActivar(BaseModel):
+    """Sets amortization terms for the first time on a debtor that doesn't
+    yet have them - see deudor_service.activar_amortizacion. Distinct from
+    DeudorAmortizacionUpdate: cuota_inicial IS accepted here (mirrors
+    DeudorCreate, for a loan that predates the app)."""
+
+    monto_total: Decimal
+    tasa_interes: Decimal
+    periodo_tasa: PeriodoTasa
+    numero_cuotas: int
+    cuota_inicial: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def validate_cuota_inicial(self) -> "DeudorAmortizacionActivar":
+        if self.cuota_inicial is not None and self.cuota_inicial > self.numero_cuotas:
+            raise ValueError("cuota_inicial cannot be greater than numero_cuotas")
+        return self
+
+
 class DeudorRead(BaseModel):
     id: int
     nombre: str
