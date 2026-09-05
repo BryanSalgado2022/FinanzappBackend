@@ -99,6 +99,18 @@ class ConceptoUpdate(BaseModel):
     cuota_inicial: int | None = None
 
 
+class ConceptoAmortizacionUpdate(BaseModel):
+    """Recalculates an already-amortized debt's financial terms - see
+    concept_service.actualizar_amortizacion. All four fields are required
+    together since recalculation always replaces the full term set;
+    cuota_inicial is deliberately never part of this request."""
+
+    valor_total: Decimal
+    tasa_interes: Decimal
+    periodo_tasa: PeriodoTasa
+    numero_cuotas: int
+
+
 class ConceptoRead(BaseModel):
     id: int
     nombre: str

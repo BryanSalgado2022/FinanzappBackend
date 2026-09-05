@@ -8,7 +8,12 @@ from app.dependencies import get_current_user
 from app.models.concepto import Concepto, TipoConcepto
 from app.models.user import User
 from app.schemas.categoria import CategoriaRead
-from app.schemas.concepto import ConceptoCreate, ConceptoRead, ConceptoUpdate
+from app.schemas.concepto import (
+    ConceptoAmortizacionUpdate,
+    ConceptoCreate,
+    ConceptoRead,
+    ConceptoUpdate,
+)
 from app.services import concept_service, entry_service
 from app.services.amortization_service import generar_tabla_amortizacion, tasa_mensual_desde
 from app.services.concept_service import ConceptoNotFoundError, es_amortizada
@@ -149,6 +154,36 @@ def update_concept(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Concept not found") from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    return _to_read(session, concepto)
+
+
+@router.put("/{concepto_id}/amortizacion", response_model=ConceptoRead)
+def update_amortizacion(
+    concepto_id: int,
+    payload: ConceptoAmortizacionUpdate,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> ConceptoRead:
+    try:
+        concepto, anio_inicio, mes_inicio, siguiente_numero = concept_service.actualizar_amortizacion(
+            session,
+            current_user.id,
+            concepto_id,
+            valor_total=payload.valor_total,
+            tasa_interes=payload.tasa_interes,
+            periodo_tasa=payload.periodo_tasa,
+            numero_cuotas=payload.numero_cuotas,
+        )
+    except ConceptoNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Concept not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+    tasa_mensual = tasa_mensual_desde(concepto.tasa_interes, concepto.periodo_tasa)
+    tabla = generar_tabla_amortizacion(concepto.valor_total, tasa_mensual, concepto.numero_cuotas)
+    entry_service.generar_entradas_amortizacion(
+        session, concepto, tabla, anio_inicio, mes_inicio, cuota_inicial=siguiente_numero
+    )
     return _to_read(session, concepto)
 
 

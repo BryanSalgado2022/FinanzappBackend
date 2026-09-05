@@ -133,6 +133,70 @@ def update_concepto(
     return concepto
 
 
+def _sumar_un_mes(anio: int, mes: int) -> tuple[int, int]:
+    total = (anio * 12 + (mes - 1)) + 1
+    return total // 12, total % 12 + 1
+
+
+def actualizar_amortizacion(
+    session: Session,
+    user_id: int,
+    concepto_id: int,
+    *,
+    valor_total: Decimal,
+    tasa_interes: Decimal,
+    periodo_tasa: PeriodoTasa,
+    numero_cuotas: int,
+) -> tuple[Concepto, int, int, int]:
+    """Corrects an already-amortized debt's financial terms. Every paid entry
+    is left completely untouched; every unpaid entry is deleted so the
+    caller can regenerate the remaining schedule from the returned anchor -
+    see design.md for the full algorithm. Returns
+    (concepto, anio_inicio, mes_inicio, siguiente_numero) for the router to
+    pass into entry_service.generar_entradas_amortizacion."""
+    concepto = get_concepto(session, user_id, concepto_id)
+    if concepto.tipo != TipoConcepto.DEUDA:
+        raise ValueError("amortization terms only apply to concepts of type 'deuda'")
+    if not es_amortizada(concepto):
+        raise ValueError(
+            "this concept has no existing amortization terms to correct; "
+            "amortization can only be set at creation"
+        )
+
+    entradas = list(
+        session.exec(select(EntradaMensual).where(EntradaMensual.concepto_id == concepto.id))
+    )
+    pagadas = [e for e in entradas if e.pagado]
+    n_pagadas = len(pagadas)
+    siguiente_numero = (concepto.cuota_inicial or 1) + n_pagadas
+
+    if numero_cuotas < siguiente_numero - 1:
+        raise ValueError(
+            "numero_cuotas cannot be less than the installments already paid on this debt"
+        )
+
+    if pagadas:
+        anio_ultimo, mes_ultimo = max((e.anio, e.mes) for e in pagadas)
+        anio_inicio, mes_inicio = _sumar_un_mes(anio_ultimo, mes_ultimo)
+    else:
+        hoy = date.today()
+        anio_inicio, mes_inicio = hoy.year, hoy.month
+
+    for entrada in entradas:
+        if not entrada.pagado:
+            session.delete(entrada)
+
+    concepto.valor_total = valor_total
+    concepto.tasa_interes = tasa_interes
+    concepto.periodo_tasa = periodo_tasa
+    concepto.numero_cuotas = numero_cuotas
+    session.add(concepto)
+    session.commit()
+    session.refresh(concepto)
+
+    return concepto, anio_inicio, mes_inicio, siguiente_numero
+
+
 def delete_concepto(session: Session, user_id: int, concepto_id: int) -> None:
     concepto = get_concepto(session, user_id, concepto_id)
     session.delete(concepto)
