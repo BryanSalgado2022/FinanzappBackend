@@ -10,12 +10,13 @@ class UserRead(BaseModel):
     email: str
     name: str
     color_acento: str | None
-    ahorros: Decimal | None
+    # Computed running balance from the user's savings ledger (see
+    # ahorro_service.saldo_ahorros) - never manually set, always present.
+    ahorros: Decimal
 
 
 class UserUpdate(BaseModel):
     color_acento: str | None = None
-    ahorros: Decimal | None = None
 
     @model_validator(mode="after")
     def validate_color_acento(self) -> "UserUpdate":

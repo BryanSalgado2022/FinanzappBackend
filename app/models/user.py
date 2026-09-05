@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-from decimal import Decimal
 
 from sqlmodel import Field, SQLModel
 
@@ -30,8 +29,6 @@ class User(SQLModel, table=True):
     # None means "use the app's default accent color" - a first-class valid
     # state, not merely "not yet set".
     color_acento: str | None = Field(default=None)
-    # Manually-managed savings figure - never computed/adjusted by the app.
-    ahorros: Decimal | None = Field(default=None, max_digits=14, decimal_places=2)
     # Secret, regenerable token identifying this user for the unauthenticated
     # calendar-subscribe endpoint - see app/routers/calendar.py. None until
     # the user first generates one.

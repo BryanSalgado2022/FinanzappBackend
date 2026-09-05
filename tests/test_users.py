@@ -56,20 +56,22 @@ def test_patch_empty_body_leaves_accent_color_unchanged(client: TestClient, monk
     assert response.json()["color_acento"] == "rosa"
 
 
-def test_get_me_defaults_to_no_ahorros(client: TestClient, monkeypatch):
+def test_get_me_defaults_to_zero_ahorros(client: TestClient, monkeypatch):
     headers = _headers(client, monkeypatch)
     response = client.get("/users/me", headers=headers)
-    assert response.json()["ahorros"] is None
+    assert response.json()["ahorros"] == "0.00"
 
 
-def test_patch_sets_and_clears_ahorros(client: TestClient, monkeypatch):
+def test_patch_ahorros_is_ignored_and_does_not_change_the_computed_balance(
+    client: TestClient, monkeypatch
+):
     headers = _headers(client, monkeypatch)
     patch = client.patch("/users/me", json={"ahorros": "1500000"}, headers=headers)
     assert patch.status_code == 200, patch.text
-    assert patch.json()["ahorros"] == "1500000.00"
+    assert patch.json()["ahorros"] == "0.00"
 
-    clear = client.patch("/users/me", json={"ahorros": None}, headers=headers)
-    assert clear.json()["ahorros"] is None
+    get = client.get("/users/me", headers=headers)
+    assert get.json()["ahorros"] == "0.00"
 
 
 def test_users_me_scoped_to_authenticated_user(client: TestClient, monkeypatch):

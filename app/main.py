@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.routers import (
     agent,
+    ahorros,
     auth,
     calendar,
     categorias,
@@ -29,6 +30,7 @@ app.add_middleware(
 )
 
 app.include_router(agent.router)
+app.include_router(ahorros.router)
 app.include_router(auth.router)
 app.include_router(calendar.router)
 app.include_router(categorias.router)
