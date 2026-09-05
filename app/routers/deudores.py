@@ -5,8 +5,16 @@ from app.database import get_session
 from app.dependencies import get_current_user
 from app.models.deudor import Abono, Deudor
 from app.models.user import User
-from app.schemas.deudor import AbonoCreate, AbonoRead, DeudorCreate, DeudorRead, DeudorUpdate
-from app.services import deudor_service
+from app.schemas.deudor import (
+    AbonoCreate,
+    AbonoRead,
+    DeudorAmortizacionUpdate,
+    DeudorCreate,
+    DeudorRead,
+    DeudorUpdate,
+)
+from app.services import cuota_deudor_service, deudor_service
+from app.services.amortization_service import generar_tabla_amortizacion, tasa_mensual_desde
 from app.services.deudor_service import AbonoNotFoundError, DeudorNotFoundError
 
 router = APIRouter(prefix="/deudores", tags=["deudores"])
@@ -19,6 +27,11 @@ def _to_read(session: Session, deudor: Deudor) -> DeudorRead:
         monto_total=deudor.monto_total,
         fecha=deudor.fecha,
         garantia=deudor.garantia,
+        tasa_interes=deudor.tasa_interes,
+        periodo_tasa=deudor.periodo_tasa,
+        numero_cuotas=deudor.numero_cuotas,
+        cuota_fija=deudor_service.cuota_fija(deudor),
+        cuota_inicial=deudor.cuota_inicial,
         activo=deudor.activo,
         finalizado_en=deudor.finalizado_en,
         saldo_restante=deudor_service.saldo_restante(session, deudor),
@@ -42,6 +55,10 @@ def create_deudor(
         payload.monto_total,
         payload.fecha,
         garantia=payload.garantia,
+        tasa_interes=payload.tasa_interes,
+        periodo_tasa=payload.periodo_tasa,
+        numero_cuotas=payload.numero_cuotas,
+        cuota_inicial=payload.cuota_inicial,
     )
     return _to_read(session, deudor)
 
@@ -103,6 +120,36 @@ def delete_deudor(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debtor not found") from exc
 
 
+@router.put("/{deudor_id}/amortizacion", response_model=DeudorRead)
+def update_amortizacion(
+    deudor_id: int,
+    payload: DeudorAmortizacionUpdate,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> DeudorRead:
+    try:
+        deudor, anio_inicio, mes_inicio, siguiente_numero = deudor_service.actualizar_amortizacion(
+            session,
+            current_user.id,
+            deudor_id,
+            monto_total=payload.monto_total,
+            tasa_interes=payload.tasa_interes,
+            periodo_tasa=payload.periodo_tasa,
+            numero_cuotas=payload.numero_cuotas,
+        )
+    except DeudorNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debtor not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+    tasa_mensual = tasa_mensual_desde(deudor.tasa_interes, deudor.periodo_tasa)
+    tabla = generar_tabla_amortizacion(deudor.monto_total, tasa_mensual, deudor.numero_cuotas)
+    cuota_deudor_service.generar_cuotas_amortizacion(
+        session, deudor, tabla, anio_inicio, mes_inicio, cuota_inicial=siguiente_numero
+    )
+    return _to_read(session, deudor)
+
+
 @router.post("/{deudor_id}/abonos", response_model=AbonoRead, status_code=status.HTTP_201_CREATED)
 def create_abono(
     deudor_id: int,
@@ -116,6 +163,8 @@ def create_abono(
         )
     except DeudorNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debtor not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     return _abono_to_read(abono)
 
 

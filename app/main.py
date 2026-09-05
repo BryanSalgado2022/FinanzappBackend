@@ -8,6 +8,7 @@ from app.routers import (
     calendar,
     categorias,
     concepts,
+    cuotas_deudor,
     debts,
     deudores,
     entries,
@@ -32,6 +33,7 @@ app.include_router(auth.router)
 app.include_router(calendar.router)
 app.include_router(categorias.router)
 app.include_router(concepts.router)
+app.include_router(cuotas_deudor.router)
 app.include_router(debts.router)
 app.include_router(deudores.router)
 app.include_router(entries.router)

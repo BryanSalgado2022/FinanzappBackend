@@ -4,7 +4,7 @@ from sqlalchemy import case, extract
 from sqlmodel import Session, func, select
 
 from app.models.concepto import Concepto, TipoConcepto
-from app.models.deudor import Abono, Deudor
+from app.models.deudor import Abono, CuotaDeudor, Deudor
 from app.models.entrada_mensual import EntradaMensual
 from app.schemas.summary import MonthlySummary
 from app.services.gasto_service import sum_gastos
@@ -48,10 +48,29 @@ def _sum_abono_interes(session: Session, user_id: int, anio: int, mes: int) -> D
     return Decimal(result)
 
 
+def _sum_cuota_deudor_interes(session: Session, user_id: int, anio: int, mes: int) -> Decimal:
+    # Only recognized once actually paid, keyed by fecha_pago (not the
+    # installment's own scheduled anio/mes) - mirrors _sum_abono_interes's
+    # "income only when actually received" semantics. See design.md.
+    result = session.exec(
+        select(func.coalesce(func.sum(CuotaDeudor.interes), 0))
+        .join(Deudor, Deudor.id == CuotaDeudor.deudor_id)
+        .where(
+            Deudor.user_id == user_id,
+            CuotaDeudor.pagado.is_(True),
+            extract("year", CuotaDeudor.fecha_pago) == anio,
+            extract("month", CuotaDeudor.fecha_pago) == mes,
+        )
+    ).one()
+    return Decimal(result)
+
+
 def monthly_summary(session: Session, user_id: int, anio: int, mes: int) -> MonthlySummary:
-    total_ingresos = _sum_pagado_o_planeado(
-        session, user_id, anio, mes, (TipoConcepto.INGRESO,)
-    ) + _sum_abono_interes(session, user_id, anio, mes)
+    total_ingresos = (
+        _sum_pagado_o_planeado(session, user_id, anio, mes, (TipoConcepto.INGRESO,))
+        + _sum_abono_interes(session, user_id, anio, mes)
+        + _sum_cuota_deudor_interes(session, user_id, anio, mes)
+    )
     total_gastos = _sum_pagado_o_planeado(
         session, user_id, anio, mes, (TipoConcepto.DEUDA, TipoConcepto.GASTO_FIJO)
     ) + sum_gastos(session, user_id, anio, mes)

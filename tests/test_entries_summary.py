@@ -253,6 +253,98 @@ def test_summary_unaffected_by_abono_with_no_interes(client: TestClient, monkeyp
     assert as_decimal(summary["total_ingresos"]) == Decimal("0")
 
 
+def test_summary_includes_paid_cuota_deudor_interes_in_the_month_it_was_paid(
+    client: TestClient, monkeypatch
+):
+    headers = _headers(client, monkeypatch)
+    # A schedule anchored to a past/future fecha (2031-01) so the cuota's own
+    # scheduled anio/mes never coincides with today - marking it paid records
+    # fecha_pago as today, so income must show up in today's month, not 2031-01.
+    deudor = client.post(
+        "/deudores",
+        json={
+            "nombre": "Pedro",
+            "monto_total": "1000000.00",
+            "fecha": "2031-01-01",
+            "tasa_interes": "2",
+            "periodo_tasa": "mensual",
+            "numero_cuotas": 12,
+        },
+        headers=headers,
+    ).json()
+    cuotas = client.get(f"/deudores/{deudor['id']}/cuotas", headers=headers).json()
+    primera = next(c for c in cuotas if c["anio"] == 2031 and c["mes"] == 1)
+
+    client.patch(
+        f"/deudores/{deudor['id']}/cuotas/2031/1",
+        json={"monto_pagado": primera["monto_planeado"], "pagado": True},
+        headers=headers,
+    )
+
+    today = datetime.date.today()
+    summary_scheduled_month = client.get(
+        "/summary", params={"anio": 2031, "mes": 1}, headers=headers
+    ).json()
+    assert as_decimal(summary_scheduled_month["total_ingresos"]) == Decimal("0")
+
+    summary_payment_month = client.get(
+        "/summary", params={"anio": today.year, "mes": today.month}, headers=headers
+    ).json()
+    assert as_decimal(summary_payment_month["total_ingresos"]) == as_decimal(primera["interes"])
+
+
+def test_summary_unaffected_by_unpaid_cuota_deudor(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    deudor = client.post(
+        "/deudores",
+        json={
+            "nombre": "Pedro",
+            "monto_total": "1000000.00",
+            "fecha": "2031-01-01",
+            "tasa_interes": "2",
+            "periodo_tasa": "mensual",
+            "numero_cuotas": 12,
+        },
+        headers=headers,
+    ).json()
+
+    summary = client.get("/summary", params={"anio": 2031, "mes": 1}, headers=headers).json()
+    assert as_decimal(summary["total_ingresos"]) == Decimal("0")
+
+
+def test_summary_unaffected_by_cuota_deudor_principal(client: TestClient, monkeypatch):
+    headers = _headers(client, monkeypatch)
+    deudor = client.post(
+        "/deudores",
+        json={
+            "nombre": "Pedro",
+            "monto_total": "1000000.00",
+            "fecha": "2031-01-01",
+            "tasa_interes": "2",
+            "periodo_tasa": "mensual",
+            "numero_cuotas": 12,
+        },
+        headers=headers,
+    ).json()
+    cuotas = client.get(f"/deudores/{deudor['id']}/cuotas", headers=headers).json()
+    primera = next(c for c in cuotas if c["anio"] == 2031 and c["mes"] == 1)
+
+    client.patch(
+        f"/deudores/{deudor['id']}/cuotas/2031/1",
+        json={"monto_pagado": primera["monto_planeado"], "pagado": True},
+        headers=headers,
+    )
+
+    today = datetime.date.today()
+    summary = client.get(
+        "/summary", params={"anio": today.year, "mes": today.month}, headers=headers
+    ).json()
+    # Only the interest portion counts, not the full monto_pagado (which
+    # includes principal).
+    assert as_decimal(summary["total_ingresos"]) == as_decimal(primera["interes"])
+    assert as_decimal(summary["total_ingresos"]) < as_decimal(primera["monto_planeado"])
+
+
 def test_fecha_pago_set_on_pagado_transition_and_cleared_on_unpaid(
     client: TestClient, monkeypatch
 ):
