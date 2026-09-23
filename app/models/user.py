@@ -33,4 +33,12 @@ class User(SQLModel, table=True):
     # calendar-subscribe endpoint - see app/routers/calendar.py. None until
     # the user first generates one.
     ics_token: str | None = Field(default=None, unique=True, index=True)
+    # The WhatsApp number linked to this account (E.164, e.g. "+573001234567"),
+    # set once the user completes the wa.me linking flow - see
+    # app/services/whatsapp_service.py. None until linked.
+    whatsapp_phone: str | None = Field(default=None, unique=True, index=True)
+    # One-time secret sent as the prefilled wa.me message body to link a
+    # phone number to this account - mirrors ics_token's shape. Regenerated
+    # on each link attempt, cleared once consumed.
+    whatsapp_link_token: str | None = Field(default=None, unique=True, index=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

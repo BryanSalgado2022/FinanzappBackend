@@ -5,6 +5,14 @@ from decimal import Decimal
 os.environ.setdefault("DATABASE_URL", "sqlite://")
 os.environ.setdefault("GOOGLE_CLIENT_ID", "test-client-id")
 os.environ.setdefault("GEMINI_API_KEY", "test-gemini-key")
+# Fixed, fake test credentials - unconditional assignment (not setdefault),
+# same reason as DEV_MODE below: docker-compose's `env_file: .env` injects
+# the developer's real Twilio secrets as actual container env vars, which
+# setdefault can't override since they're already present in os.environ by
+# the time this module runs.
+os.environ["TWILIO_ACCOUNT_SID"] = "ACtest0000000000000000000000000000"
+os.environ["TWILIO_AUTH_TOKEN"] = "test-twilio-auth-token"
+os.environ["TWILIO_WHATSAPP_NUMBER"] = "whatsapp:+15550001111"
 os.environ.setdefault("JWT_SECRET", "test-secret")
 # Without this, Settings falls back to reading the real .env file's DEV_MODE
 # value (pydantic-settings env_file fallback), coupling test behavior to

@@ -7,6 +7,7 @@ from app.models.entrada_mensual import EntradaMensual
 from app.models.gasto import Gasto, GastoCategoria
 from app.models.tarea import Tarea
 from app.models.user import User
+from app.models.whatsapp_session import WhatsAppSession
 
 __all__ = [
     "AbonoCapitalConcepto",
@@ -25,4 +26,5 @@ __all__ = [
     "GastoCategoria",
     "Tarea",
     "User",
+    "WhatsAppSession",
 ]

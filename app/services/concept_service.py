@@ -71,6 +71,67 @@ def create_concepto(
     return concepto
 
 
+def create_concepto_and_seed_entry(
+    session: Session,
+    user_id: int,
+    nombre: str,
+    tipo: TipoConcepto,
+    categoria_ids: list[int] | None,
+    valor_total: Decimal | None,
+    *,
+    tasa_interes: Decimal | None = None,
+    periodo_tasa: PeriodoTasa | None = None,
+    numero_cuotas: int | None = None,
+    cuota_inicial: int | None = None,
+    duracion_meses: int | None = None,
+    dia_vencimiento: int | None = None,
+    monto_planeado: Decimal | None = None,
+    anio: int | None = None,
+    mes: int | None = None,
+) -> Concepto:
+    """create_concepto plus the entry-seeding every caller needs right after:
+    the amortization schedule for an amortized debt, the fixed window for a
+    duracion_meses concept, or a single month's monto_planeado otherwise.
+    Shared by the REST creation endpoint and the WhatsApp agent so both go
+    through identical logic - see design.md (add-whatsapp-agent)."""
+    concepto = create_concepto(
+        session,
+        user_id,
+        nombre,
+        tipo,
+        categoria_ids,
+        valor_total,
+        tasa_interes=tasa_interes,
+        periodo_tasa=periodo_tasa,
+        numero_cuotas=numero_cuotas,
+        cuota_inicial=cuota_inicial,
+        duracion_meses=duracion_meses,
+        dia_vencimiento=dia_vencimiento,
+    )
+    hoy = date.today()
+    anio = anio or hoy.year
+    mes = mes or hoy.month
+    if es_amortizada(concepto):
+        tasa_mensual = tasa_mensual_desde(concepto.tasa_interes, concepto.periodo_tasa)
+        tabla = generar_tabla_amortizacion(concepto.valor_total, tasa_mensual, concepto.numero_cuotas)
+        entry_service.generar_entradas_amortizacion(
+            session, concepto, tabla, hoy.year, hoy.month, cuota_inicial=concepto.cuota_inicial or 1
+        )
+    elif (
+        monto_planeado is not None
+        and duracion_meses is not None
+        and concepto.tipo in (TipoConcepto.GASTO_FIJO, TipoConcepto.INGRESO)
+    ):
+        entry_service.generar_entradas_recurrentes(session, concepto, monto_planeado, anio, mes, duracion_meses)
+    elif monto_planeado is not None and concepto.tipo in (
+        TipoConcepto.DEUDA,
+        TipoConcepto.GASTO_FIJO,
+        TipoConcepto.INGRESO,
+    ):
+        entry_service.upsert_monthly_entry(session, concepto, anio, mes, monto_planeado=monto_planeado)
+    return concepto
+
+
 def get_concepto(session: Session, user_id: int, concepto_id: int) -> Concepto:
     concepto = session.get(Concepto, concepto_id)
     if concepto is None or concepto.user_id != user_id:

@@ -1,11 +1,9 @@
-from datetime import date
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session
 
 from app.database import get_session
 from app.dependencies import get_current_user
-from app.models.concepto import Concepto, TipoConcepto
+from app.models.concepto import Concepto
 from app.models.user import User
 from app.schemas.categoria import CategoriaRead
 from app.schemas.concepto import (
@@ -17,7 +15,7 @@ from app.schemas.concepto import (
 )
 from app.services import concept_service, entry_service
 from app.services.amortization_service import generar_tabla_amortizacion, tasa_mensual_desde
-from app.services.concept_service import ConceptoNotFoundError, es_amortizada
+from app.services.concept_service import ConceptoNotFoundError
 
 router = APIRouter(prefix="/concepts", tags=["concepts"])
 
@@ -52,7 +50,7 @@ def create_concept(
     session: Session = Depends(get_session),
 ) -> ConceptoRead:
     try:
-        concepto = concept_service.create_concepto(
+        concepto = concept_service.create_concepto_and_seed_entry(
             session,
             current_user.id,
             payload.nombre,
@@ -65,48 +63,12 @@ def create_concept(
             cuota_inicial=payload.cuota_inicial,
             duracion_meses=payload.duracion_meses,
             dia_vencimiento=payload.dia_vencimiento,
+            monto_planeado=payload.monto_planeado,
+            anio=payload.anio,
+            mes=payload.mes,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    today = date.today()
-    anio = payload.anio or today.year
-    mes = payload.mes or today.month
-    if es_amortizada(concepto):
-        tasa_mensual = tasa_mensual_desde(concepto.tasa_interes, concepto.periodo_tasa)
-        tabla = generar_tabla_amortizacion(concepto.valor_total, tasa_mensual, concepto.numero_cuotas)
-        entry_service.generar_entradas_amortizacion(
-            session,
-            concepto,
-            tabla,
-            today.year,
-            today.month,
-            cuota_inicial=concepto.cuota_inicial or 1,
-        )
-    elif (
-        payload.monto_planeado is not None
-        and payload.duracion_meses is not None
-        and concepto.tipo in (TipoConcepto.GASTO_FIJO, TipoConcepto.INGRESO)
-    ):
-        entry_service.generar_entradas_recurrentes(
-            session,
-            concepto,
-            payload.monto_planeado,
-            anio,
-            mes,
-            payload.duracion_meses,
-        )
-    elif payload.monto_planeado is not None and concepto.tipo in (
-        TipoConcepto.DEUDA,
-        TipoConcepto.GASTO_FIJO,
-        TipoConcepto.INGRESO,
-    ):
-        entry_service.upsert_monthly_entry(
-            session,
-            concepto,
-            anio,
-            mes,
-            monto_planeado=payload.monto_planeado,
-        )
     return _to_read(session, concepto)
 
 

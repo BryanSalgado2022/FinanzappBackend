@@ -17,6 +17,7 @@ from app.routers import (
     summary,
     tareas,
     users,
+    whatsapp,
 )
 
 app = FastAPI(title="Finanzapp API")
@@ -43,6 +44,7 @@ app.include_router(gastos.router)
 app.include_router(summary.router)
 app.include_router(tareas.router)
 app.include_router(users.router)
+app.include_router(whatsapp.router)
 
 
 @app.get("/health")

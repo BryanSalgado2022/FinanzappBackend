@@ -13,6 +13,12 @@ class Settings(BaseSettings):
     # standalone feature, not core auth - the rest of the app must keep
     # working when this isn't configured yet.
     gemini_api_key: str | None = None
+    # Optional, like gemini_api_key: the WhatsApp agent integration is a
+    # standalone feature - the rest of the app must keep working when these
+    # aren't configured yet.
+    twilio_account_sid: str | None = None
+    twilio_auth_token: str | None = None
+    twilio_whatsapp_number: str | None = None
     jwt_secret: str
     jwt_algorithm: str = "HS256"
     jwt_expires_minutes: int = 60 * 24 * 7
