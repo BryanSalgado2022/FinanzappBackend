@@ -119,6 +119,11 @@ class CuotaDeudorRead(BaseModel):
 class CuotaDeudorUpdate(BaseModel):
     monto_pagado: Decimal | None = None
     pagado: bool = False
+    # When set alongside a monto_pagado greater than monto_planeado, the
+    # surplus is routed into a principal prepayment instead of being stored
+    # against this cuota - see deudor_service.registrar_pago_con_sobrante
+    # and design.md (add-abono-sobrante). None preserves today's behavior.
+    abono_capital_modo: ModoAbonoCapital | None = None
 
 
 class AbonoCreate(BaseModel):

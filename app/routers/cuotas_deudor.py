@@ -57,6 +57,30 @@ def mark_cuota(
     except DeudorNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debtor not found") from exc
 
+    if payload.abono_capital_modo is not None:
+        if payload.monto_pagado is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="monto_pagado is required when abono_capital_modo is set",
+            )
+        try:
+            cuota = deudor_service.registrar_pago_con_sobrante(
+                session,
+                current_user.id,
+                deudor_id,
+                anio=anio,
+                mes=mes,
+                monto_pagado=payload.monto_pagado,
+                modo=payload.abono_capital_modo.value,
+            )
+        except DeudorNotFoundError as exc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debtor not found") from exc
+        except CuotaNotFoundError as exc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cuota not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        return _to_read(cuota)
+
     try:
         cuota = cuota_deudor_service.marcar_pagada(
             session, deudor, anio, mes, monto_pagado=payload.monto_pagado, pagado=payload.pagado

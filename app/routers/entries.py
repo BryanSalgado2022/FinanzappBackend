@@ -59,6 +59,29 @@ def upsert_entry(
     except ConceptoNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Concept not found") from exc
 
+    if payload.abono_capital_modo is not None:
+        if payload.monto_pagado is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="monto_pagado is required when abono_capital_modo is set",
+            )
+        try:
+            entry = concept_service.registrar_pago_con_sobrante(
+                session,
+                current_user.id,
+                concepto_id,
+                anio=anio,
+                mes=mes,
+                monto_planeado=payload.monto_planeado,
+                monto_pagado=payload.monto_pagado,
+                modo=payload.abono_capital_modo.value,
+            )
+        except ConceptoNotFoundError as exc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Concept not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        return _to_entry_read(concepto, entry)
+
     entry = entry_service.upsert_monthly_entry(
         session,
         concepto,

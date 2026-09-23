@@ -375,6 +375,46 @@ def registrar_abono_capital(
     return deudor
 
 
+def registrar_pago_con_sobrante(
+    session: Session,
+    user_id: int,
+    deudor_id: int,
+    *,
+    anio: int,
+    mes: int,
+    monto_pagado: Decimal,
+    modo: str,
+) -> CuotaDeudor:
+    """Marks a cuota paid, capping its stored monto_pagado to monto_planeado,
+    and routes the surplus into a principal prepayment via
+    registrar_abono_capital - all in one call, so saldo_restante never
+    double-counts the surplus (see design.md, add-abono-sobrante). Rejects
+    if the debtor isn't amortized or if monto_pagado doesn't exceed the
+    cuota's monto_planeado (nothing to route)."""
+    deudor = get_deudor(session, user_id, deudor_id)
+    if not es_amortizado(deudor):
+        raise ValueError(
+            "routing a payment surplus into a principal prepayment only "
+            "applies to amortized debtors"
+        )
+
+    cuota = cuota_deudor_service.get_cuota(session, deudor_id, anio, mes)
+    if cuota is None:
+        raise cuota_deudor_service.CuotaNotFoundError()
+    if monto_pagado <= cuota.monto_planeado:
+        raise ValueError("no hay sobrante que registrar como abono a capital")
+
+    cuota = cuota_deudor_service.marcar_pagada(
+        session, deudor, anio, mes, monto_pagado=cuota.monto_planeado, pagado=True
+    )
+    excedente = monto_pagado - cuota.monto_planeado
+    registrar_abono_capital(
+        session, user_id, deudor_id, monto=excedente, fecha=cuota.fecha_pago, modo=modo
+    )
+    session.refresh(cuota)
+    return cuota
+
+
 def create_abono(
     session: Session,
     user_id: int,

@@ -35,7 +35,7 @@ def _to_read(session: Session, concepto: Concepto) -> ConceptoRead:
         tasa_interes=concepto.tasa_interes,
         periodo_tasa=concepto.periodo_tasa,
         numero_cuotas=concepto.numero_cuotas,
-        cuota_fija=concept_service.cuota_fija(concepto),
+        cuota_fija=concept_service.cuota_fija(session, concepto),
         cuota_inicial=concepto.cuota_inicial,
         duracion_meses=concepto.duracion_meses,
         dia_vencimiento=concepto.dia_vencimiento,

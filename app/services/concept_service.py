@@ -3,11 +3,14 @@ from decimal import Decimal
 
 from sqlmodel import Session, func, select
 
+from app.models.abono_capital_concepto import AbonoCapitalConcepto
 from app.models.categoria import Categoria
 from app.models.concepto import Concepto, PeriodoTasa, TipoConcepto
 from app.models.entrada_mensual import EntradaMensual
+from app.services import entry_service
 from app.services.amortization_service import (
     calcular_cuota_fija,
+    calcular_cuotas_restantes,
     generar_tabla_amortizacion,
     tasa_mensual_desde,
 )
@@ -272,12 +275,173 @@ def saldo_restante(session: Session, concepto: Concepto) -> Decimal | None:
             EntradaMensual.concepto_id == concepto.id
         )
     ).one()
-    restante = valor_total_efectivo(concepto) - Decimal(total_pagado)
+    # Principal prepayments recorded via registrar_abono_capital also reduce
+    # the balance. Unlike Deudor's Abono, AbonoCapitalConcepto has no
+    # pre-existing rows and no historical-abono ambiguity to guard against
+    # (see design.md, add-abono-sobrante), so every row here always counts.
+    total_abonos_capital = session.exec(
+        select(func.coalesce(func.sum(AbonoCapitalConcepto.monto), 0)).where(
+            AbonoCapitalConcepto.concepto_id == concepto.id
+        )
+    ).one()
+    restante = (
+        valor_total_efectivo(concepto) - Decimal(total_pagado) - Decimal(total_abonos_capital)
+    )
     return restante if restante > 0 else Decimal("0")
 
 
-def cuota_fija(concepto: Concepto) -> Decimal | None:
+def cuota_fija(session: Session, concepto: Concepto) -> Decimal | None:
+    """Reads the fixed installment from the actual schedule (the next
+    not-yet-paid entry's planned amount) rather than recomputing it from
+    stored terms - see design.md (add-abono-sobrante): a principal
+    prepayment can change the remaining schedule without touching
+    valor_total/numero_cuotas, which stay as historical record of the
+    original debt. Falls back to the most recent entry if none are unpaid,
+    or the stored-terms computation if no schedule exists at all yet."""
     if not es_amortizada(concepto) or concepto.valor_total is None:
         return None
+    proxima = session.exec(
+        select(EntradaMensual)
+        .where(EntradaMensual.concepto_id == concepto.id, EntradaMensual.pagado.is_(False))
+        .order_by(EntradaMensual.anio, EntradaMensual.mes)
+    ).first()
+    if proxima is not None:
+        return proxima.monto_planeado
+    ultima = session.exec(
+        select(EntradaMensual)
+        .where(EntradaMensual.concepto_id == concepto.id)
+        .order_by(EntradaMensual.anio.desc(), EntradaMensual.mes.desc())
+    ).first()
+    if ultima is not None:
+        return ultima.monto_planeado
     tasa_mensual = tasa_mensual_desde(concepto.tasa_interes, concepto.periodo_tasa)
     return calcular_cuota_fija(concepto.valor_total, tasa_mensual, concepto.numero_cuotas)
+
+
+def registrar_abono_capital(
+    session: Session,
+    user_id: int,
+    concepto_id: int,
+    *,
+    monto: Decimal,
+    fecha: date,
+    modo: str,
+) -> Concepto:
+    """Records an extraordinary principal prepayment against an amortized
+    debt concept - see design.md (add-abono-sobrante). Straight port of
+    deudor_service.registrar_abono_capital: valor_total/numero_cuotas stay as
+    historical record of the original debt (only numero_cuotas is bumped to
+    reflect the new total installment count); the reduction is tracked via an
+    AbonoCapitalConcepto row instead, which saldo_restante now also
+    subtracts. Fully settling the balance closes the concept, mirroring the
+    existing activo/finalizado_en transition."""
+    concepto = get_concepto(session, user_id, concepto_id)
+    if not es_amortizada(concepto):
+        raise ValueError(
+            "principal prepayments only apply to amortized debts; use a "
+            "regular payment instead"
+        )
+
+    abono = AbonoCapitalConcepto(concepto_id=concepto.id, monto=monto, fecha=fecha)
+    session.add(abono)
+    session.commit()
+
+    nuevo_saldo = saldo_restante(session, concepto)
+
+    entradas = list(
+        session.exec(select(EntradaMensual).where(EntradaMensual.concepto_id == concepto.id))
+    )
+
+    if nuevo_saldo <= 0:
+        for entrada in entradas:
+            if not entrada.pagado:
+                session.delete(entrada)
+        if concepto.activo:
+            concepto.activo = False
+            concepto.finalizado_en = date.today()
+            session.add(concepto)
+        session.commit()
+        session.refresh(concepto)
+        return concepto
+
+    pagadas = [e for e in entradas if e.pagado]
+    n_pagadas = len(pagadas)
+    siguiente_numero = (concepto.cuota_inicial or 1) + n_pagadas
+
+    if pagadas:
+        anio_ultimo, mes_ultimo = max((e.anio, e.mes) for e in pagadas)
+        anio_inicio, mes_inicio = _sumar_un_mes(anio_ultimo, mes_ultimo)
+    else:
+        hoy = date.today()
+        anio_inicio, mes_inicio = hoy.year, hoy.month
+
+    tasa_mensual = tasa_mensual_desde(concepto.tasa_interes, concepto.periodo_tasa)
+    cuota_fija_actual = cuota_fija(session, concepto)
+
+    if modo == "reducir_cuota":
+        numero_cuotas_restantes = concepto.numero_cuotas - siguiente_numero + 1
+    elif modo == "reducir_plazo":
+        numero_cuotas_restantes = calcular_cuotas_restantes(nuevo_saldo, tasa_mensual, cuota_fija_actual)
+    else:
+        raise ValueError("modo must be 'reducir_plazo' or 'reducir_cuota'")
+
+    if numero_cuotas_restantes <= 0:
+        raise ValueError("this concept's schedule has no remaining installments to adjust")
+
+    for entrada in entradas:
+        if not entrada.pagado:
+            session.delete(entrada)
+
+    concepto.numero_cuotas = (siguiente_numero - 1) + numero_cuotas_restantes
+    session.add(concepto)
+    session.commit()
+    session.refresh(concepto)
+
+    tabla = generar_tabla_amortizacion(nuevo_saldo, tasa_mensual, numero_cuotas_restantes)
+    entry_service.generar_entradas_amortizacion(
+        session, concepto, tabla, anio_inicio, mes_inicio, cuota_inicial=1
+    )
+    return concepto
+
+
+def registrar_pago_con_sobrante(
+    session: Session,
+    user_id: int,
+    concepto_id: int,
+    *,
+    anio: int,
+    mes: int,
+    monto_planeado: Decimal,
+    monto_pagado: Decimal,
+    modo: str,
+) -> EntradaMensual:
+    """Marks a monthly entry paid, capping its stored monto_pagado to
+    monto_planeado, and routes the surplus into a principal prepayment via
+    registrar_abono_capital - all in one call, so the balance never
+    double-counts the surplus (see design.md, add-abono-sobrante). Rejects
+    if the concept isn't amortized or if monto_pagado doesn't exceed
+    monto_planeado (nothing to route)."""
+    concepto = get_concepto(session, user_id, concepto_id)
+    if not es_amortizada(concepto):
+        raise ValueError(
+            "routing a payment surplus into a principal prepayment only "
+            "applies to amortized debts"
+        )
+    if monto_pagado <= monto_planeado:
+        raise ValueError("no hay sobrante que registrar como abono a capital")
+
+    entry = entry_service.upsert_monthly_entry(
+        session,
+        concepto,
+        anio,
+        mes,
+        monto_planeado=monto_planeado,
+        monto_pagado=monto_planeado,
+        pagado=True,
+    )
+    excedente = monto_pagado - monto_planeado
+    registrar_abono_capital(
+        session, user_id, concepto_id, monto=excedente, fecha=entry.fecha_pago, modo=modo
+    )
+    session.refresh(entry)
+    return entry
